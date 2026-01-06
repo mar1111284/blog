@@ -3,7 +3,22 @@
 document.addEventListener('DOMContentLoaded', () => {
     const terminalBody = document.getElementById('terminal-body');
     const terminal = document.getElementById('terminal');
+
     let currentInput = '';
+
+    // Create hidden input for real keyboard capture (especially mobile)
+    const hiddenInput = document.createElement('input');
+    hiddenInput.type = 'text';
+    hiddenInput.style.position = 'absolute';
+    hiddenInput.style.opacity = '0';
+    hiddenInput.style.height = '1px';
+    hiddenInput.style.width = '1px';
+    hiddenInput.style.border = 'none';
+    hiddenInput.style.outline = 'none';
+    hiddenInput.autocapitalize = 'off';
+    hiddenInput.autocorrect = 'off';
+    hiddenInput.spellcheck = false;
+    terminal.appendChild(hiddenInput);
 
     const appendLine = (html) => {
         const line = document.createElement('div');
@@ -36,6 +51,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const newPrompt = () => {
         currentInput = '';
         renderPrompt();
+        hiddenInput.value = ''; // sync
+        hiddenInput.focus();    // bring up keyboard on mobile
     };
 
     // === COMMAND PARSER ===
@@ -50,22 +67,17 @@ document.addEventListener('DOMContentLoaded', () => {
             appendLine('  <span class="hint">about</span>    – Who the hell is Rekav?');
             appendLine('');
         },
-
     };
 
     const handleCommand = (input) => {
         const trimmed = input.trim();
-        
-        if (trimmed === '') {
-            // Empty input → just new prompt, no output
-            return;
-        }
+        if (trimmed === '') return;
 
         const parts = trimmed.split(' ');
         const cmd = parts[0].toLowerCase();
 
         if (commands[cmd]) {
-            commands[cmd](parts.slice(1)); // pass args if needed later
+            commands[cmd](parts.slice(1));
         } else {
             appendLine(`<span style="color: #ff5555;">bash: ${escapeHtml(cmd)}: command not found</span>`);
             appendLine(`<span style="color: #6272a4;">Did you mean something else? Try</span> <span class="hint">help</span>`);
@@ -78,37 +90,33 @@ document.addEventListener('DOMContentLoaded', () => {
     appendLine('');
     newPrompt();
 
-    terminal.focus();
+    // Focus hidden input when terminal is tapped
+    terminal.addEventListener('click', () => {
+        hiddenInput.focus();
+    });
 
-    // === INPUT HANDLING ===
-    terminal.addEventListener('keydown', (e) => {
+    // Sync hidden input → currentInput on any change
+    hiddenInput.addEventListener('input', (e) => {
+        currentInput = e.target.value;
+        renderPrompt();
+    });
+
+    // Handle Enter key (from hidden input)
+    hiddenInput.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') {
             e.preventDefault();
 
-            // Freeze the current line (remove cursor)
+            // Freeze the line
             const livePrompt = terminalBody.querySelector('.live-prompt');
             if (livePrompt) {
                 livePrompt.innerHTML = `<span class="prompt">guest</span><span style="color:#ffb86c;">@rekav</span>:~$ </span><span class="input">${escapeHtml(currentInput)}</span>`;
                 livePrompt.classList.remove('live-prompt');
             }
 
-            // Process the command
             handleCommand(currentInput);
             newPrompt();
         }
-        else if (e.key === 'Backspace') {
-            e.preventDefault();
-            if (currentInput.length > 0) {
-                currentInput = currentInput.slice(0, -1);
-                renderPrompt();
-            }
-        }
-        else if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
-            e.preventDefault();
-            currentInput += e.key;
-            renderPrompt();
-        }
     });
 
-    terminal.addEventListener('click', () => terminal.focus());
+    // Optional: support Backspace/Delete if needed (input event already handles most)
 });
