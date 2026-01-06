@@ -113,8 +113,8 @@ main {
 .terminal-body {               
     padding: 20px;
     overflow-y: scroll;
-    min-height: 0;
     font-size: 0.85rem;
+    min-height: 0;
 }
 
 .hint {
@@ -139,7 +139,7 @@ footer {
     }
 
     header {
-        margin-bottom: 20px;
+        margin-bottom: 0;
     }
 
     h1 {
@@ -163,13 +163,13 @@ footer {
     }
 
     .terminal {
-        margin: 20px auto;
-        height: 500px;
+        margin: 10px auto;
+        height: 350px;
         border-radius: 6px;
     }
 
     .terminal-body {
-        padding: 15px;
-        font-size: 0.9rem;
+        padding: 10px;
+        font-size: 0.75rem;
     }
 }

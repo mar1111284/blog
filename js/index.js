@@ -26,7 +26,7 @@ document.addEventListener('DOMContentLoaded', () => {
         background: 'transparent',
         caretColor: 'transparent',  // Hides the native blinking caret completely
         zIndex: '-1',
-        fontSize: '16px'            // Prevents zoom on iOS when focusing
+        //fontSize: '16px'            // Prevents zoom on iOS when focusing
     });
 
     document.body.appendChild(hiddenInput); // Attach to body, not terminal
@@ -69,18 +69,22 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     // === COMMANDS ===
-    const commands = {
-        help: () => {
-            appendLine('<span style="color: #ff79c6;">Available commands:</span>');
-            appendLine('  <span class="hint">help</span>     – Show this help message');
-            appendLine('  <span class="hint">clear</span>    – Clear the terminal (coming soon)');
-            appendLine('  <span class="hint">shitpost</span> – View latest shitposts');
-            appendLine('  <span class="hint">random</span>   – Random thoughts & rants');
-            appendLine('  <span class="hint">gallery</span>  – Image gallery');
-            appendLine('  <span class="hint">about</span>    – Who the hell is Rekav?');
-            appendLine('');
-        },
-    };
+	const commands = {
+		help: () => {
+		    appendLine('<span style="color: #ff79c6;">Available commands:</span>');
+		    appendLine('  <span class="hint">help</span>     – Show this help message');
+		    appendLine('  <span class="hint">clear</span>    – Clear the terminal screen');
+		    appendLine('  <span class="hint">shitpost</span> – View latest shitposts');
+		    appendLine('  <span class="hint">random</span>   – Random thoughts & rants');
+		    appendLine('  <span class="hint">gallery</span>  – Image gallery');
+		    appendLine('  <span class="hint">about</span>    – Who the hell is Rekav?');
+		    appendLine('');
+		},
+
+		clear: () => {
+		    terminalBody.innerHTML = '';
+		},
+	};
 
     const handleCommand = (input) => {
         const trimmed = input.trim();
