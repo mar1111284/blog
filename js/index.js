@@ -6,19 +6,30 @@ document.addEventListener('DOMContentLoaded', () => {
 
     let currentInput = '';
 
-    // Create hidden input for real keyboard capture (especially mobile)
+    // Hidden input — now positioned at the bottom and fully invisible
     const hiddenInput = document.createElement('input');
     hiddenInput.type = 'text';
-    hiddenInput.style.position = 'absolute';
-    hiddenInput.style.opacity = '0';
-    hiddenInput.style.height = '1px';
-    hiddenInput.style.width = '1px';
-    hiddenInput.style.border = 'none';
-    hiddenInput.style.outline = 'none';
     hiddenInput.autocapitalize = 'off';
     hiddenInput.autocorrect = 'off';
     hiddenInput.spellcheck = false;
-    terminal.appendChild(hiddenInput);
+
+    // Critical styling to fix mobile issues
+    Object.assign(hiddenInput.style, {
+        position: 'fixed',          // Fixed so it doesn't push content
+        bottom: '20px',             // Place it near bottom (inside terminal view)
+        left: '-100px',             // Way off-screen horizontally
+        width: '1px',
+        height: '1px',
+        opacity: '0',
+        border: 'none',
+        outline: 'none',
+        background: 'transparent',
+        caretColor: 'transparent',  // Hides the native blinking caret completely
+        zIndex: '-1',
+        fontSize: '16px'            // Prevents zoom on iOS when focusing
+    });
+
+    document.body.appendChild(hiddenInput); // Attach to body, not terminal
 
     const appendLine = (html) => {
         const line = document.createElement('div');
@@ -45,17 +56,19 @@ document.addEventListener('DOMContentLoaded', () => {
             <span class="cursor">█</span>
         `;
         terminalBody.appendChild(promptLine);
+
+        // Always scroll to bottom so user sees what they're typing
         terminalBody.scrollTop = terminalBody.scrollHeight;
     };
 
     const newPrompt = () => {
         currentInput = '';
         renderPrompt();
-        hiddenInput.value = ''; // sync
-        hiddenInput.focus();    // bring up keyboard on mobile
+        hiddenInput.value = '';
+        hiddenInput.focus();
     };
 
-    // === COMMAND PARSER ===
+    // === COMMANDS ===
     const commands = {
         help: () => {
             appendLine('<span style="color: #ff79c6;">Available commands:</span>');
@@ -90,23 +103,22 @@ document.addEventListener('DOMContentLoaded', () => {
     appendLine('');
     newPrompt();
 
-    // Focus hidden input when terminal is tapped
+    // Tap terminal → focus hidden input (triggers keyboard)
     terminal.addEventListener('click', () => {
         hiddenInput.focus();
     });
 
-    // Sync hidden input → currentInput on any change
+    // Real-time typing sync
     hiddenInput.addEventListener('input', (e) => {
         currentInput = e.target.value;
         renderPrompt();
     });
 
-    // Handle Enter key (from hidden input)
+    // Enter key → execute
     hiddenInput.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') {
             e.preventDefault();
 
-            // Freeze the line
             const livePrompt = terminalBody.querySelector('.live-prompt');
             if (livePrompt) {
                 livePrompt.innerHTML = `<span class="prompt">guest</span><span style="color:#ffb86c;">@rekav</span>:~$ </span><span class="input">${escapeHtml(currentInput)}</span>`;
@@ -118,5 +130,10 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // Optional: support Backspace/Delete if needed (input event already handles most)
+    // Bonus: Keep focus when scrolling on mobile
+    terminalBody.addEventListener('scroll', () => {
+        if (document.activeElement !== hiddenInput) {
+            hiddenInput.focus();
+        }
+    });
 });
