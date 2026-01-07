@@ -1,8 +1,10 @@
-const RESOLVE_IMAGE = true; // false = eternal chaos
+const IS_ROOT = (sessionStorage.getItem('rekav_root_session') === 'true');
+const RESOLVE_IMAGE = IS_ROOT;
 const TILE_COLS = 16;
 const TILE_ROWS = 9;
 
 document.addEventListener("DOMContentLoaded", () => {
+
 
     const TILE_COUNT = TILE_COLS * TILE_ROWS;
     const isDesktop = window.innerWidth > 768;
