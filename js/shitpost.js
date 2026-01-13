@@ -22,20 +22,29 @@ document.addEventListener("DOMContentLoaded", async () => {
     
     const isDesktop = window.innerWidth > 768;
 
-    posts.forEach((post, index) => {
-        const article = document.createElement("article");
-        article.className = "preview-item";
+	posts.forEach((post, index) => {
+		const article = document.createElement("article");
+		article.className = "preview-item";
 
-        article.innerHTML = `
-            <div class="preview-media"></div>
-            <h2>${escapeHtml(post.title)}</h2>
-            <time datetime="${post.date}">${formatDate(post.date)}</time>
-            <p>${escapeHtml(post.content)}</p>
-        `;
+		// Make the whole card clickable if articlePath exists
+		if (post.articlePath) {
+		    article.style.cursor = "pointer";
+		    article.title = "Click to read full post"; // optional tooltip
+		    article.addEventListener("click", () => {
+		        window.location.href = post.articlePath;
+		    });
+		}
 
-        container.appendChild(article);
-        initTileChaos(article, index + 1, isDesktop);
-    });
+		article.innerHTML = `
+		    <div class="preview-media"></div>
+		    <h2>${escapeHtml(post.title)}</h2>
+		    <time datetime="${post.date}">${formatDate(post.date)}</time>
+		    <p>${escapeHtml(post.content)}</p>
+		`;
+
+		container.appendChild(article);
+		initTileChaos(article, index + 1, isDesktop);
+	});
 });
 
 // Basic HTML escape

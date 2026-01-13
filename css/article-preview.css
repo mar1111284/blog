@@ -17,6 +17,20 @@
   text-align: left;
 }
 
+/*
+#shitpost-container {
+    visibility: hidden;
+    opacity: 0;
+    transition: opacity 0.6s ease;
+}
+
+#shitpost-container[data-ready] {
+    visibility: visible;
+    opacity: 1;
+}
+
+*/
+
 .preview-item:hover {
   border-left-color: #ff79c6;
   padding-left: 1.8rem;

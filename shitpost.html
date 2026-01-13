@@ -25,20 +25,21 @@
     </header>
 
     <main>
-		<p id="root-warning" style="color: yellow;font-size: 0.85rem;margin-bottom: 2rem; font-weight: normal; text-align: center;">
-			root access required.
+		
+		<!-- The warning message -->
+		<p id="root-warning" style="color: yellow; font-size: 0.85rem; margin-bottom: 2rem; font-weight: normal; text-align: center;">
+		  root access required.
 		</p>
 
 		<script>
-		  window.REKAV_ROOT = (sessionStorage.getItem('rekav_root_session') === 'true');
-
-		  const warning = document.getElementById('root-warning');
-
-		  if (window.REKAV_ROOT) {
-			warning.style.display = 'none';
-		  } else {
-			warning.style.display = 'block';
-		  }
+		  document.addEventListener('DOMContentLoaded', () => {
+			const warning = document.getElementById('root-warning');
+			if (sessionStorage.getItem('rekav_root_session') === 'true') {
+			  if (warning) warning.style.display = 'none';
+			} else {
+			  if (warning) warning.style.display = 'block';
+			}
+		  });
 		</script>
 
         <section class="preview-list" id="shitpost-container">

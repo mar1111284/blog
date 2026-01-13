@@ -23,12 +23,40 @@
     </header>
 
     <main>
-		<section class="terminal" id="terminal" tabindex="0">
-			<div class="terminal-header">
-				<span class="title">Terminal — guest@rekav</span>
-			</div>
-			<div id="terminal-body" class="terminal-body"></div>
-		</section>
+		<div style="
+		  width: 100%;
+		  overflow: hidden;
+		  border: none;
+		  margin: 0;
+		  padding: 0;
+		  display: flex;
+		  justify-content: center;
+		">
+		  <iframe 
+			src="terminal/terminal.html"
+			frameborder="0"
+			id="terminal-frame"
+		  ></iframe>
+		</div>
+
+		<p id="small-msg" 
+		   style="color:yellow; font-size:0.9rem; text-align:center; padding:2rem; margin:0; display:none;">
+		  Terminal only available on larger screens. Use desktop environment (min 540px width)
+		</p>
+
+		<script>
+		  const frame = document.getElementById('terminal-frame');
+		  const msg   = document.getElementById('small-msg');
+
+		  // Check viewport width
+		  if (window.innerWidth >= 540) {
+			frame.style.display = 'block';    // show terminal
+			msg.style.display   = 'none';     // hide message
+		  } else {
+			frame.style.display = 'none';     // hide terminal
+			msg.style.display   = 'block';    // show message
+		  }
+		</script>
     </main>
 
     <footer>
@@ -36,5 +64,14 @@
     </footer>
     
     <script src="js/index.js"></script>
+
+	<script>
+	window.addEventListener('DOMContentLoaded', () => {
+		const script = document.createElement('script');
+		script.src = "terminal.js?v=123";
+		document.body.appendChild(script);
+	});
+	</script>
+
 </body>
 </html>

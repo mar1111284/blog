@@ -38,6 +38,7 @@ function processAllCurrentShitposts() {
             el.dataset.chaosified = 'true';
             chaosifyElement(el);
         });
+       
     });
 }
 

@@ -3,7 +3,8 @@
     "title": "There is no clean exit",
     "date": "2026-01-03",
     "content": "You either leave too early and remain misunderstood, or stay too long and rot with the furniture.",
-    "imageIndex": 1
+    "imageIndex": 1,
+    "articlePath": "pages/article_test.html"
   },
   {
     "title": "Schrödinger's situationship",
