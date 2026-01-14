@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rekav Blog</title>
+  <script type="module" crossorigin src="/assets/index-xnH-bcff.js"></script>
+  <link rel="stylesheet" crossorigin href="/assets/index-D8N6x52t.css">
+</head>
+<body>
+    <header>
+        <h1><a href="index.html">Rekav</a></h1>
+        <p class="page-description">Personal website. Shitposts, random thoughts, more less whatever else I feel like dumping here.</p>
+        
+        <nav>
+            <ul>
+                <li><a href="shitpost.html">Shitpost</a></li>
+                <li><a href="random.html">Random</a></li>
+                <li><a href="gallery.html">Gallery</a></li>
+                <li><a href="about.html">About</a></li>
+            </ul>
+        </nav>
+    </header>
+
+    <main>
+		<div style="
+		  width: 100%;
+		  overflow: hidden;
+		  border: none;
+		  margin: 0;
+		  padding: 0;
+		  display: flex;
+		  justify-content: center;
+		">
+		  <iframe 
+			src="terminal/terminal.html"
+			frameborder="0"
+			id="terminal-frame"
+		  ></iframe>
+		</div>
+
+		<p id="small-msg" 
+		   style="color:yellow; font-size:0.9rem; text-align:center; padding:2rem; margin:0; display:none;">
+		  Terminal only available on larger screens. Use desktop environment (min 540px width)
+		</p>
+
+		<script>
+		  const frame = document.getElementById('terminal-frame');
+		  const msg   = document.getElementById('small-msg');
+
+		  // Check viewport width
+		  if (window.innerWidth >= 540) {
+			frame.style.display = 'block';    // show terminal
+			msg.style.display   = 'none';     // hide message
+		  } else {
+			frame.style.display = 'none';     // hide terminal
+			msg.style.display   = 'block';    // show message
+		  }
+		</script>
+    </main>
+
+    <footer>
+        <p>© 2026 Rekav</p>
+    </footer>
+    
+
+	<script>
+	window.addEventListener('DOMContentLoaded', () => {
+		const script = document.createElement('script');
+		script.src = "terminal.js";
+		document.body.appendChild(script);
+	});
+	</script>
+
+</body>
+</html>
