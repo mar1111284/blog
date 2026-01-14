@@ -68,7 +68,7 @@ var ENVIRONMENT_IS_SHELL = false;
 
 // --pre-jses are emitted after the Module integration code, so that they can
 // refer to Module (if they choose; they can also define Module)
-// include: /tmp/tmpa1h60cmw.js
+// include: /tmp/tmps9ci448d.js
 if (!Module["expectedDataFileDownloads"]) Module["expectedDataFileDownloads"] = 0;
 
 Module["expectedDataFileDownloads"]++;
@@ -211,23 +211,23 @@ Module["expectedDataFileDownloads"]++;
   });
 })();
 
-// end include: /tmp/tmpa1h60cmw.js
-// include: /tmp/tmpyvq74kn0.js
+// end include: /tmp/tmps9ci448d.js
+// include: /tmp/tmpar5o8n3p.js
 // All the pre-js content up to here must remain later on, we need to run
 // it.
 if ((typeof ENVIRONMENT_IS_WASM_WORKER != "undefined" && ENVIRONMENT_IS_WASM_WORKER) || (typeof ENVIRONMENT_IS_PTHREAD != "undefined" && ENVIRONMENT_IS_PTHREAD) || (typeof ENVIRONMENT_IS_AUDIO_WORKLET != "undefined" && ENVIRONMENT_IS_AUDIO_WORKLET)) Module["preRun"] = [];
 
 var necessaryPreJSTasks = Module["preRun"].slice();
 
-// end include: /tmp/tmpyvq74kn0.js
-// include: /tmp/tmpnpbu33e4.js
+// end include: /tmp/tmpar5o8n3p.js
+// include: /tmp/tmpdz5tc5d4.js
 if (!Module["preRun"]) throw "Module.preRun should exist because file support used it; did a pre-js delete it?";
 
 necessaryPreJSTasks.forEach(task => {
   if (Module["preRun"].indexOf(task) < 0) throw "All preRun tasks that exist before user pre-js code should remain after; did you replace Module or modify Module.preRun?";
 });
 
-// end include: /tmp/tmpnpbu33e4.js
+// end include: /tmp/tmpdz5tc5d4.js
 var arguments_ = [];
 
 var thisProgram = "./this.program";
@@ -9957,7 +9957,28 @@ function checkIncomingModuleAPI() {
 }
 
 var ASM_CONSTS = {
-  383832: () => {
+  385672: ($0, $1, $2) => {
+    const source = UTF8ToString($0);
+    const target = UTF8ToString($1);
+    const text = UTF8ToString($2);
+    sessionStorage.setItem("rekav_translate_request", JSON.stringify({
+      source,
+      target,
+      text
+    }));
+    console.log("C -> JS translate request queued:", source, target, text);
+  },
+  385962: ($0, $1) => {
+    const out_ptr = $0;
+    const maxlen = $1;
+    const res = sessionStorage.getItem("rekav_translate_result");
+    if (!res) return;
+    const len = lengthBytesUTF8(res) + 1;
+    if (len > maxlen) return;
+    stringToUTF8(res, out_ptr, maxlen);
+    sessionStorage.removeItem("rekav_translate_result");
+  },
+  386238: () => {
     try {
       let canvas = Module["canvas"];
       if (!document.fullscreenElement) {
@@ -9969,7 +9990,7 @@ var ASM_CONSTS = {
       console.error("Fullscreen toggle error:", e);
     }
   },
-  384035: $0 => {
+  386441: $0 => {
     try {
       var page = UTF8ToString($0);
       window.open("/" + page + ".html", "_blank");
@@ -9977,13 +9998,13 @@ var ASM_CONSTS = {
       console.error("cmd_open JS error:", e);
     }
   },
-  384174: ($0, $1) => {
+  386580: ($0, $1) => {
     const key = UTF8ToString($1);
     const value = UTF8ToString($0);
     sessionStorage.setItem(key, value);
     console.log("SessionStorage set:", key, value);
   },
-  384324: $0 => {
+  386730: $0 => {
     var str = UTF8ToString($0) + "\n\n" + "Abort/Retry/Ignore/AlwaysIgnore? [ariA] :";
     var reply = window.prompt(str, "i");
     if (reply === null) {
@@ -9991,7 +10012,7 @@ var ASM_CONSTS = {
     }
     return reply.length === 1 ? reply.charCodeAt(0) : -1;
   },
-  384539: () => {
+  386945: () => {
     if (typeof (AudioContext) !== "undefined") {
       return true;
     } else if (typeof (webkitAudioContext) !== "undefined") {
@@ -9999,7 +10020,7 @@ var ASM_CONSTS = {
     }
     return false;
   },
-  384686: () => {
+  387092: () => {
     if ((typeof (navigator.mediaDevices) !== "undefined") && (typeof (navigator.mediaDevices.getUserMedia) !== "undefined")) {
       return true;
     } else if (typeof (navigator.webkitGetUserMedia) !== "undefined") {
@@ -10007,7 +10028,7 @@ var ASM_CONSTS = {
     }
     return false;
   },
-  384920: $0 => {
+  387326: $0 => {
     if (typeof (Module["SDL2"]) === "undefined") {
       Module["SDL2"] = {};
     }
@@ -10031,11 +10052,11 @@ var ASM_CONSTS = {
     }
     return SDL2.audioContext === undefined ? -1 : 0;
   },
-  385472: () => {
+  387878: () => {
     var SDL2 = Module["SDL2"];
     return SDL2.audioContext.sampleRate;
   },
-  385540: ($0, $1, $2, $3) => {
+  387946: ($0, $1, $2, $3) => {
     var SDL2 = Module["SDL2"];
     var have_microphone = function(stream) {
       if (SDL2.capture.silenceTimer !== undefined) {
@@ -10077,7 +10098,7 @@ var ASM_CONSTS = {
       }, have_microphone, no_microphone);
     }
   },
-  387233: ($0, $1, $2, $3) => {
+  389639: ($0, $1, $2, $3) => {
     var SDL2 = Module["SDL2"];
     SDL2.audio.scriptProcessorNode = SDL2.audioContext["createScriptProcessor"]($1, 0, $0);
     SDL2.audio.scriptProcessorNode["onaudioprocess"] = function(e) {
@@ -10109,7 +10130,7 @@ var ASM_CONSTS = {
       SDL2.audio.silenceTimer = setInterval(silence_callback, ($1 / SDL2.audioContext.sampleRate) * 1e3);
     }
   },
-  388408: ($0, $1) => {
+  390814: ($0, $1) => {
     var SDL2 = Module["SDL2"];
     var numChannels = SDL2.capture.currentCaptureBuffer.numberOfChannels;
     for (var c = 0; c < numChannels; ++c) {
@@ -10128,7 +10149,7 @@ var ASM_CONSTS = {
       }
     }
   },
-  389013: ($0, $1) => {
+  391419: ($0, $1) => {
     var SDL2 = Module["SDL2"];
     var buf = $0 >>> 2;
     var numChannels = SDL2.audio.currentOutputBuffer["numberOfChannels"];
@@ -10142,7 +10163,7 @@ var ASM_CONSTS = {
       }
     }
   },
-  389502: $0 => {
+  391908: $0 => {
     var SDL2 = Module["SDL2"];
     if ($0) {
       if (SDL2.capture.silenceTimer !== undefined) {
@@ -10176,7 +10197,7 @@ var ASM_CONSTS = {
       SDL2.audioContext = undefined;
     }
   },
-  390508: ($0, $1, $2) => {
+  392914: ($0, $1, $2) => {
     var w = $0;
     var h = $1;
     var pixels = $2;
@@ -10247,7 +10268,7 @@ var ASM_CONSTS = {
     }
     SDL2.ctx.putImageData(SDL2.image, 0, 0);
   },
-  391974: ($0, $1, $2, $3, $4) => {
+  394380: ($0, $1, $2, $3, $4) => {
     var w = $0;
     var h = $1;
     var hot_x = $2;
@@ -10284,18 +10305,18 @@ var ASM_CONSTS = {
     stringToUTF8(url, urlBuf, url.length + 1);
     return urlBuf;
   },
-  392962: $0 => {
+  395368: $0 => {
     if (Module["canvas"]) {
       Module["canvas"].style["cursor"] = UTF8ToString($0);
     }
   },
-  393045: () => {
+  395451: () => {
     if (Module["canvas"]) {
       Module["canvas"].style["cursor"] = "none";
     }
   },
-  393114: () => window.innerWidth,
-  393144: () => window.innerHeight
+  395520: () => window.innerWidth,
+  395550: () => window.innerHeight
 };
 
 // Imports from the Wasm binary.

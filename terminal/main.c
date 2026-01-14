@@ -20,6 +20,7 @@
 int root_active = 0;          // tracks if root is active
 int flag_js_root_activate = 0;
 int awaiting_sudo_password = 0; // tracks if sudo is waiting for password
+static int translation_pending = 0;
 
 #define ROOT_PASSWORD "rekav"
 
@@ -40,6 +41,46 @@ typedef struct {
     command_func func;
 } Command;
 
+typedef struct {
+    const char *cmd;
+    const char *description;
+} ManEntry;
+
+static ManEntry man_db[] = {
+    {
+        "translate",
+        "--------------------------------------------------\n"
+        "                   TRANSLATE                      \n"
+        "--------------------------------------------------\n\n"
+        "translate <source> <target> <text>\n"
+        "  Sends <text> to the translator and prints the result in the terminal.\n\n"
+        "Usage:\n"
+        "  translate en fr Hello world\n"
+        "  translate es en 'Hola mundo'\n\n"
+        "Examples:\n"
+        "  translate en fr Hello world\n"
+        "  translate es en Goodbye!\n"
+        "  translate ja en 'How are you?'\n\n"
+        "Notes:\n"
+        "  - Translations are handled asynchronously.\n"
+        "  - Result is automatically printed in the terminal.\n"
+        "  - You must specify both <source> and <target> languages.\n"
+        "  - MyMemory API is used; short phrases may return unexpected results.\n"
+        "  - Machine translation fallback is forced (mt=1) for reliability.\n"
+        "  - Supported languages include:\n"
+        "      en (English), fr (French), es (Spanish), de (German), it (Italian),\n"
+        "      pt (Portuguese), nl (Dutch), ru (Russian), ja (Japanese), zh (Chinese), ...\n"
+        "  - Use quotes for multi-word text.\n\n"
+        "--------------------------------------------------\n"
+        "        Type 'translate <src> <tgt> <text>'         \n"
+        "--------------------------------------------------\n"
+    },
+};
+
+
+static const int man_db_size = sizeof(man_db) / sizeof(man_db[0]);
+
+
 // cmd prototypes 
 void add_line(const char *text);
 void clear_terminal();
@@ -55,6 +96,9 @@ void cmd_exit(const char *args);
 void cmd_settings(const char *args);
 void submit_input();
 void cmd_fullscreen(const char *args);
+void cmd_translate(const char *args);
+void cmd_man(const char *args);
+int poll_translate_result();
 
 
 Command commands[] = {
@@ -68,27 +112,72 @@ Command commands[] = {
     {"exit",    "exit root",   cmd_exit},
     {"settings", "Modify terminal appearance", cmd_settings},
     {"fullscreen", "Toggle fullscreen mode", cmd_fullscreen},
+    {"translate",  "Translate text",          cmd_translate}, 
+    {"man",  "Display documentation",          cmd_man}, 
 
-    
 };
 
 int command_count = sizeof(commands) / sizeof(commands[0]);
+
+void cmd_man(const char *args) {
+    if (!args || strlen(args) == 0) {
+        add_line("Usage: man <command>");
+        return;
+    }
+
+    // Search in man_db
+    for (int i = 0; i < man_db_size; i++) {
+        if (strcmp(args, man_db[i].cmd) == 0) {
+            // Print each line of description
+            const char *desc = man_db[i].description;
+            const char *line = desc;
+            while (*line) {
+                const char *next = strchr(line, '\n');
+                if (!next) next = line + strlen(line);
+                char buf[512];
+                int len = next - line;
+                if (len >= sizeof(buf)) len = sizeof(buf) - 1;
+                memcpy(buf, line, len);
+                buf[len] = '\0';
+                add_line(buf);
+                line = (*next) ? next + 1 : next;
+            }
+            return;
+        }
+    }
+
+    add_line("No manual entry for this command.");
+}
+
 
 void cmd_settings(const char *args) {
     char option[64];
     char value[64];
 
-    // Display help if no args
-    if (!args || strlen(args) == 0) {
-        add_line("Usage: settings <option> <value>");
-        add_line("Options:");
-        add_line("  bg           - Background color (charcoal, dos_blue, pink, green, red)");
-        add_line("  font_color   - Font color (white, green, pink, red, orange)");
-        add_line("  font_size    - Font size (10-20)");
-        add_line("  line_height  - Line height (15-25)");
-        add_line("  theme        - Predefined themes (Default, MS-DOS, Barbie, Jurassic, Inferno)");
-        return;
-    }
+	if (!args || strlen(args) == 0) {
+		add_line("");
+		add_line("--------------------------------------------------");
+		add_line("                   SETTINGS                       ");
+		add_line("--------------------------------------------------");
+		add_line("");
+
+		add_line("Usage: settings <option> <value>");
+		add_line("");
+		add_line("Options:");
+		add_line("  bg           - Background color (charcoal, dos_blue, pink, green, red)");
+		add_line("  font_color   - Font color (white, green, pink, red, orange)");
+		add_line("  font_size    - Font size (10-20)");
+		add_line("  line_height  - Line height (15-25)");
+		add_line("  theme        - Predefined themes (Default, MS-DOS, Barbie, Jurassic, Inferno)");
+		
+		add_line("");
+		add_line("--------------------------------------------------");
+		add_line("       Example: settings bg charcoal            ");
+		add_line("--------------------------------------------------");
+		add_line("");
+		
+		return;
+	}
 
     // Parse option and value from args
     int matched = sscanf(args, "%63s %63s", option, value);
@@ -141,6 +230,86 @@ void cmd_settings(const char *args) {
 
 }
 
+void cmd_translate(const char *args) {
+    translation_pending = 1;
+
+    if (!args || strlen(args) == 0) {
+        add_line("Usage: translate <source> <target> <text>");
+        return;
+    }
+
+    char source[16];
+    char target[16];
+    char text[256];
+
+    // Parse: source, target, rest of line
+    if (sscanf(args, "%15s %15s %[^\n]", source, target, text) != 3) {
+        add_line("Invalid usage! Example: translate en fr Hello world");
+        return;
+    }
+
+#ifdef __EMSCRIPTEN__
+    // Store translate request in sessionStorage for JS to process
+    EM_ASM({
+        const source = UTF8ToString($0);
+        const target = UTF8ToString($1);
+        const text   = UTF8ToString($2);
+
+        sessionStorage.setItem(
+            "rekav_translate_request",
+            JSON.stringify({
+                source: source,
+                target: target,
+                text: text
+            })
+        );
+
+        console.log("C -> JS translate request queued:", source, target, text);
+    }, source, target, text);
+#endif
+
+    add_line("Translating…");
+}
+
+
+
+#ifdef __EMSCRIPTEN__
+int poll_translate_result(void) {
+    if (!translation_pending) return 0;
+
+    // small internal buffer
+    char buf[512];
+    buf[0] = '\0';
+
+    EM_ASM({
+        const out_ptr = $0;
+        const maxlen = $1;
+
+        const res = sessionStorage.getItem("rekav_translate_result");
+        if (!res) return;
+
+        const len = lengthBytesUTF8(res) + 1;
+        if (len > maxlen) return;
+
+        stringToUTF8(res, out_ptr, maxlen);
+        sessionStorage.removeItem("rekav_translate_result");
+    }, buf, sizeof(buf));
+
+    if (buf[0] != '\0') {
+        translation_pending = 0;
+        add_line(buf);  // prints automatically
+        return 1;
+    }
+
+    return 0;
+}
+#endif
+
+
+
+
+
+
 void cmd_fullscreen(const char *args) {
 #ifdef __EMSCRIPTEN__
     EM_ASM({
@@ -164,16 +333,30 @@ void cmd_fullscreen(const char *args) {
 
 // cmd implementation
 void cmd_help(const char *args) {
-    add_line("Commands:");
-    add_line("  help           - You find it.");
-    add_line("  clear          - Clear terminal output");
-    add_line("  open <page>    - Open a page in a new tab");
-	add_line("  ls             - List available pages and files");
-    add_line("  sudo           - Root login");
-    add_line("  cat <file>     - Display the content of a file (info.txt, welcome.txt)");
-    add_line("  exit           - Exit root access");
+    add_line("");
+    add_line("--------------------------------------------------");
+    add_line("                     HELP                         ");
+    add_line("--------------------------------------------------");
+    add_line("");
 
+    add_line("Commands:");
+    add_line("  help                         - Show this help message");
+    add_line("  clear                        - Clear terminal output");
+    add_line("  open <page>                  - Open a page in a new tab");
+    add_line("  ls                           - List available pages and files");
+    add_line("  sudo                         - Root login");
+    add_line("  cat <file>                   - Display the content (info.txt...)");
+    add_line("  exit                         - Exit root access");
+    add_line("  translate <src> <tgt> <text> - Translate text via MyMemory API");
+    add_line("  man <command>                - Show command documentation");
+    
+    add_line("");
+    add_line("--------------------------------------------------");
+    add_line("        Type 'man <command>' for more info       ");
+    add_line("--------------------------------------------------");
+    add_line("");
 }
+
 
 void cmd_clear(const char *args) {
     clear_terminal();
@@ -519,6 +702,10 @@ void main_loop() {
                 scroll_offset = line_count - max_visible_lines;
         }
     }
+    
+
+	poll_translate_result(); // prints automatically if translation arrived
+
 
     render();
 }
