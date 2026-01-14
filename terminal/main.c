@@ -21,6 +21,10 @@ int root_active = 0;          // tracks if root is active
 int flag_js_root_activate = 0;
 int awaiting_sudo_password = 0; // tracks if sudo is waiting for password
 static int translation_pending = 0;
+static int weather_forecast_pending = 0;
+int cursor_pos = 0; // cursor position within input
+int terminal_fullscreen = 0;
+
 
 #define ROOT_PASSWORD "rekav"
 
@@ -31,6 +35,26 @@ char terminal[MAX_LINES][MAX_LINE_LENGTH];
 int line_count = 0;
 int scroll_offset = 0;
 int running = 1;
+
+typedef struct {
+    const char *name;
+    double lat;
+    double lon;
+} City;
+
+static City cities[] = {
+    {"Paris", 48.8566, 2.3522},
+    {"London", 51.5074, -0.1278},
+    {"New_York", 40.7128, -74.0060},
+    {"Tokyo", 35.6895, 139.6917},
+    {"Sydney", -33.8688, 151.2093},
+    {"Moscow", 55.7558, 37.6173},
+    {"Berlin", 52.52, 13.4050},
+    {"Toronto", 43.6532, -79.3832},
+    {"Rio", -22.9068, -43.1729},
+    {"Cape_Town", -33.9249, 18.4241}
+};
+static const int city_count = sizeof(cities) / sizeof(cities[0]);
 
 // Struct to store each cmd
 typedef void (*command_func)(const char *args);
@@ -69,7 +93,7 @@ static ManEntry man_db[] = {
         "  - Machine translation fallback is forced (mt=1) for reliability.\n"
         "  - Supported languages include:\n"
         "      en (English), fr (French), es (Spanish), de (German), it (Italian),\n"
-        "      pt (Portuguese), nl (Dutch), ru (Russian), ja (Japanese), zh (Chinese), ...\n"
+        "      pt (Portuguese), nl (Dutch), ru (Russian), ja (Japanese), zh (Chinese)\n"
         "  - Use quotes for multi-word text.\n\n"
         "--------------------------------------------------\n"
         "        Type 'translate <src> <tgt> <text>'         \n"
@@ -98,7 +122,9 @@ void submit_input();
 void cmd_fullscreen(const char *args);
 void cmd_translate(const char *args);
 void cmd_man(const char *args);
+void cmd_weather(const char *args);
 int poll_translate_result();
+int poll_forecast_result(void);
 
 
 Command commands[] = {
@@ -112,12 +138,59 @@ Command commands[] = {
     {"exit",    "exit root",   cmd_exit},
     {"settings", "Modify terminal appearance", cmd_settings},
     {"fullscreen", "Toggle fullscreen mode", cmd_fullscreen},
-    {"translate",  "Translate text",          cmd_translate}, 
+    {"translate",  "Translate text",          cmd_translate},
+    {"weather",  "Weather Info.",          cmd_weather},
     {"man",  "Display documentation",          cmd_man}, 
 
 };
 
 int command_count = sizeof(commands) / sizeof(commands[0]);
+
+void cmd_weather(const char *args) {
+    weather_forecast_pending = 1;
+    if (!args || strlen(args) == 0) {
+        add_line("Usage: weather <city>");
+        add_line("Available cities:");
+        for (int i = 0; i < city_count; i++) {
+            add_line(cities[i].name);
+        }
+        return;
+    }
+
+    // Find city in array
+    City *selected = NULL;
+    for (int i = 0; i < city_count; i++) {
+        if (strcmp(args, cities[i].name) == 0) {
+            selected = &cities[i];
+            break;
+        }
+    }
+
+    if (!selected) {
+        add_line("City not found. Type 'weather' to see available cities.");
+        return;
+    }
+
+#ifdef __EMSCRIPTEN__
+    EM_ASM({
+        const lat = $0;
+        const lon = $1;
+        const city = UTF8ToString($2);
+
+        // Store request in sessionStorage for JS to process
+        sessionStorage.setItem(
+            "rekav_weather_request",
+            JSON.stringify({latitude: lat, longitude: lon, city: city})
+        );
+
+        console.log("C -> JS weather request queued:", city, lat, lon);
+    }, selected->lat, selected->lon, selected->name);
+#endif
+
+    char buf[128];
+    snprintf(buf, sizeof(buf), "Fetching weather for %s…", selected->name);
+    add_line(buf);
+}
 
 void cmd_man(const char *args) {
     if (!args || strlen(args) == 0) {
@@ -306,11 +379,66 @@ int poll_translate_result(void) {
 #endif
 
 
+#ifdef __EMSCRIPTEN__
+int poll_forecast_result(void) {
+    if (!weather_forecast_pending) return 0;
+
+    // Internal buffer for JS → C string
+    char buf[8192];  // big enough for multi-line text
+    buf[0] = '\0';
+
+    EM_ASM({
+        const out_ptr = $0;
+        const maxlen = $1;
+
+        const res = sessionStorage.getItem("rekav_weather_result");
+        if (!res) return;
+
+        const len = lengthBytesUTF8(res) + 1;
+        if (len > maxlen) return;
+
+        stringToUTF8(res, out_ptr, maxlen);
+        sessionStorage.removeItem("rekav_weather_result");
+    }, buf, sizeof(buf));
+
+    if (buf[0] != '\0') {
+        weather_forecast_pending = 0;
+
+        // Split by '\n' and print line by line
+        char *line = buf;
+        while (*line) {
+            char *next = strchr(line, '\n');
+            if (!next) next = line + strlen(line);
+
+            char tmp[512];
+            int len = next - line;
+            if (len >= sizeof(tmp)) len = sizeof(tmp) - 1;
+            memcpy(tmp, line, len);
+            tmp[len] = '\0';
+
+            // Print each line to terminal
+            add_line(tmp);
+
+            line = (*next) ? next + 1 : next;
+        }
+
+        add_line(""); // extra space after forecast
+        return 1;
+    }
+
+    return 0;
+}
+#endif
+
+
+
+
 
 
 
 
 void cmd_fullscreen(const char *args) {
+
 #ifdef __EMSCRIPTEN__
     EM_ASM({
         try {
@@ -325,6 +453,22 @@ void cmd_fullscreen(const char *args) {
         }
     });
     add_line("Toggled fullscreen mode.");
+
+    // --- Set font size for fullscreen ---
+    int new_size = 14;
+
+    if (settings.font) {
+        TTF_CloseFont(settings.font); // free old font
+    }
+
+    settings.font = TTF_OpenFont("font.ttf", new_size);
+    if (!settings.font) {
+        add_line("Failed to set font for fullscreen.");
+    } else {
+        add_line("Font size set to 14 for fullscreen.");
+        settings.font_size = new_size; // update settings
+    }
+
 #else
     add_line("Fullscreen not supported in native mode.");
 #endif
@@ -606,6 +750,7 @@ void draw_text(int x, int y, const char *text) {
 
 
 void render() {
+    // Draw background
 	if (settings.background_texture) {
 		SDL_RenderCopy(renderer, settings.background_texture, NULL, NULL);
 	} else {
@@ -634,29 +779,43 @@ void render() {
     int end_line = start_line + max_visible_lines;
     if (end_line > line_count) end_line = line_count;
 
+    // Draw terminal lines
     for (int i = start_line; i < end_line; i++) {
         draw_text(10, y, terminal[i]);
         y += line_height;
     }
-    
-    if (awaiting_sudo_password) {
-    // Show password masked
-    char masked[MAX_LINE_LENGTH + 1];
-    for (int i = 0; i < input_len; i++) masked[i] = '*';
-		masked[input_len] = '\0';
 
-		char prompt_line[MAX_LINE_LENGTH + 32];
-		snprintf(prompt_line, sizeof(prompt_line), "Password: %s", masked);
-		draw_text(10, HEIGHT - input_height + 10, prompt_line);
-	} else {
-		char prompt_line[MAX_LINE_LENGTH + 32];
-		snprintf(prompt_line, sizeof(prompt_line), "> %s_", input);
-		draw_text(10, HEIGHT - input_height + 10, prompt_line);
-	}
+    // ---------- Draw input prompt ----------
+    char display[MAX_LINE_LENGTH + 2]; // +1 for cursor, +1 for '\0'
+
+    if (awaiting_sudo_password) {
+        // Mask input for password
+        for (int i = 0; i < input_len; i++) {
+            display[i] = '*';
+        }
+        display[input_len] = '\0';
+    } else {
+        // Normal input
+        strcpy(display, input);
+    }
+
+    int len = strlen(display);
+
+    // Clamp cursor_pos
+    if (cursor_pos < 0) cursor_pos = 0;
+    if (cursor_pos > len) cursor_pos = len;
+
+    // Insert cursor underscore '_'
+    memmove(display + cursor_pos + 1, display + cursor_pos, len - cursor_pos + 1); // shift tail including '\0'
+    display[cursor_pos] = '_';
+
+    char prompt_line[MAX_LINE_LENGTH + 32];
+    snprintf(prompt_line, sizeof(prompt_line), "> %s", display);
+
+    draw_text(10, HEIGHT - input_height + 10, prompt_line);
 
     SDL_RenderPresent(renderer);
 }
-
 
 
 /* ---------- Main loop ---------- */
@@ -668,18 +827,29 @@ void main_loop() {
             running = 0;
 
         // Text input for normal typing
-        if (e.type == SDL_TEXTINPUT) {
-            if (input_len < MAX_LINE_LENGTH - 1) {
-                strcat(input, e.text.text);
-                input_len += strlen(e.text.text);
-            }
-        }
+		if (e.type == SDL_TEXTINPUT) {
+			int len = strlen(e.text.text);
+			if (input_len + len < MAX_LINE_LENGTH) {
+				// Move tail to make room
+				memmove(input + cursor_pos + len, input + cursor_pos, input_len - cursor_pos + 1); // +1 for '\0'
+				memcpy(input + cursor_pos, e.text.text, len);
+				input_len += len;
+				cursor_pos += len;
+			}
+		}
+
 
         if (e.type == SDL_KEYDOWN) {
             // Backspace handling
-            if (e.key.keysym.sym == SDLK_BACKSPACE && input_len > 0) {
-                input[--input_len] = '\0';
-            }
+			if (e.key.keysym.sym == SDLK_BACKSPACE && cursor_pos > 0) {
+				memmove(input + cursor_pos - 1, input + cursor_pos, input_len - cursor_pos + 1); // +1 for '\0'
+				cursor_pos--;
+				input_len--;
+			}
+			else if (e.key.keysym.sym == SDLK_DELETE && cursor_pos < input_len) {
+				memmove(input + cursor_pos, input + cursor_pos + 1, input_len - cursor_pos);
+				input_len--;
+			}
             // Enter submits input
             else if (e.key.keysym.sym == SDLK_RETURN) {
                 submit_input();  // <-- submit_input() now handles sudo/password logic
@@ -691,6 +861,13 @@ void main_loop() {
             else if (e.key.keysym.sym == SDLK_DOWN) {
                 scroll_offset++;
             }
+            else if (e.key.keysym.sym == SDLK_LEFT && cursor_pos > 0) {
+				cursor_pos--;
+			}
+			else if (e.key.keysym.sym == SDLK_RIGHT && cursor_pos < input_len) {
+				cursor_pos++;
+			}
+
         }
 
         // Mouse wheel scroll
@@ -705,6 +882,7 @@ void main_loop() {
     
 
 	poll_translate_result(); // prints automatically if translation arrived
+	poll_forecast_result();
 
 
     render();

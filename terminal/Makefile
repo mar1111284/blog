@@ -3,7 +3,7 @@
 
 # === Configuration ===
 TARGET = terminal
-SOURCES = main.c base64.c data_codec.c settings.c             # Add more .c files here if you have them, e.g. terminal.c utils.c
+SOURCES = main.c base64.c data_codec.c settings.c
 ASSETS = welcome.txt info.txt manifesto.txt font.ttf assets/bg_barbie.png assets/bg_jurassic.png
 
 EMSDK_FLAGS = \
@@ -23,40 +23,46 @@ EMSDK_FLAGS = \
     -s GL_DEBUG=1 \
     -s ENVIRONMENT=web \
     -s MIN_WEBGL_VERSION=2 \
-    -s SDL2_IMAGE_FORMATS='["png"]'
+    -s SDL2_IMAGE_FORMATS='["png"]' \
 
-# No optimization — makes debugging much easier
-# (we use -O0 in DEBUG_FLAGS instead)
-
-# Optional: useful during debugging/development
+# Debug flags
 DEBUG_FLAGS = -gsource-map -O0 -s ASSERTIONS=2 -s SAFE_HEAP=1 -s STACK_OVERFLOW_CHECK=2
-
-# Release / optimized build flags (uncomment when ready)
-# RELEASE_FLAGS = -O3 -s ASSERTIONS=0
 
 # Preload all your text/font files
 PRELOAD = $(foreach f,$(ASSETS),--preload-file $(f))
 
-# === Tools ===
+# Tools
 EMCC = emcc
 
 # === Rules ===
 
-all: $(TARGET).html
+all: $(TARGET).js terminal.html
 
-$(TARGET).html: $(SOURCES) $(ASSETS)
-	@echo "Building WebAssembly version..."
+# Build JS/WASM every time
+$(TARGET).js: $(SOURCES) $(ASSETS)
+	@echo "Building WebAssembly (JS + WASM)..."
 	$(EMCC) $(SOURCES) \
-		$(EMSDK_FLAGS) \
-		$(PRELOAD) \
-		-o $@ \
-		$(DEBUG_FLAGS)   # remove/comment this line for release build
+	    $(EMSDK_FLAGS) \
+	    $(PRELOAD) \
+	    -o $(TARGET).js \
+	    $(DEBUG_FLAGS)
 
-# Clean old build artifacts (very useful!)
+# Generate HTML only if it does not exist
+terminal.html:
+	@if [ ! -f $@ ]; then \
+	    echo "Generating terminal.html..."; \
+	    # Copy from a template HTML file you provide \
+	    cp template.html $@; \
+	else \
+	    echo "$@ exists — keeping existing HTML"; \
+	fi
+
+# Clean JS/WASM only (keep HTML)
 clean:
-	rm -f $(TARGET).js $(TARGET).wasm $(TARGET).html $(TARGET).data
+	rm -f $(TARGET).js $(TARGET).wasm $(TARGET).data
 	rm -f $(TARGET).js.map $(TARGET).wasm.map   # if using source maps
-	@echo "Clean complete."
+	@echo "Clean complete. $(TARGET).html was NOT removed."
 
 # Phony targets
 .PHONY: all clean
+
