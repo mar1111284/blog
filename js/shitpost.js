@@ -8,17 +8,30 @@ document.addEventListener("DOMContentLoaded", async () => {
     const container = document.getElementById("shitpost-container");
     if (!container) return;
 
-    let posts = [];
+	let posts = [];
 
-    try {
-        const response = await fetch("shitposts.json");
-        if (!response.ok) throw new Error("Failed to load shitposts");
-        posts = await response.json();
-    } catch (err) {
-        console.error(err);
-        container.innerHTML = '<p style="color:#f44;text-align:center;">Failed to load the chaos...</p>';
-        return;
-    }
+	try {
+		const stored = sessionStorage.getItem("rekav_data");
+
+		if (stored) {
+		    posts = JSON.parse(stored);
+		} else {
+		    const response = await fetch("shitposts.json");
+		    if (!response.ok) throw new Error("Failed to load shitposts");
+		    posts = await response.json();
+		}
+
+		if (!Array.isArray(posts)) {
+		    throw new Error("Invalid posts payload");
+		}
+
+	} catch (err) {
+		console.error(err);
+		container.innerHTML =
+		    '<p style="color:#f44;text-align:center;">Failed to load the chaos...</p>';
+		return;
+	}
+
     
     const isDesktop = window.innerWidth > 768;
 
@@ -26,14 +39,18 @@ document.addEventListener("DOMContentLoaded", async () => {
 		const article = document.createElement("article");
 		article.className = "preview-item";
 
-		// Make the whole card clickable if articlePath exists
-		if (post.articlePath) {
-		    article.style.cursor = "pointer";
-		    article.title = "Click to read full post"; // optional tooltip
-		    article.addEventListener("click", () => {
-		        window.location.href = post.articlePath;
-		    });
-		}
+		article.style.cursor = "pointer";
+		article.title = "Click to read full post";
+
+		article.addEventListener("click", () => {
+			// store opaque navigation intent for WASM
+			sessionStorage.setItem("rekav_nav", String(index));
+
+			// open the single article viewport in a new tab
+			window.open("article.html", "_blank");
+		});
+
+
 
 		article.innerHTML = `
 		    <div class="preview-media"></div>

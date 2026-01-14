@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rekav — Article</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <header>
+        <h1><a href="index.html">Rekav</a></h1>
+        <nav>
+            <ul>
+                <li><a href="shitpost.html">Shitpost</a></li>
+                <li><a href="random.html">Random</a></li>
+                <li><a href="gallery.html">Gallery</a></li>
+                <li><a href="about.html">About</a></li>
+            </ul>
+        </nav>
+    </header>
+
+    <main>
+        <div id="article-content">
+            <p>Loading article…</p>
+        </div>
+    </main>
+
+    <footer>
+        <p>© 2026 Rekav</p>
+    </footer>
+    
+	<script>
+	window.addEventListener("load", () => {
+		const container = document.getElementById("article-content");
+
+		// Get requested article index
+		const index = parseInt(sessionStorage.getItem("rekav_nav") || "-1");
+		if (index < 0) {
+		    container.innerHTML = "<p>No article selected.</p>";
+		    return;
+		}
+
+		// Retrieve the article directly (already decoded)
+		const articleKey = "rekav_article_" + index;
+		const articleContent = sessionStorage.getItem(articleKey);
+
+		if (!articleContent) {
+		    container.innerHTML = "<p>Article data not found.</p>";
+		    return;
+		}
+
+		// Inject directly into the page
+		container.innerHTML = articleContent;
+	});
+	</script>
+
+
+</body>
+</html>
+

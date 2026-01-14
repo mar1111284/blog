@@ -8,8 +8,8 @@ a{
 }
 
 #terminal-frame {
-    width: 602px;       /* match your SDL canvas */
-    height: 400px;
+    width: 802px;       /* match your SDL canvas */
+    height: 520px;
     border: none !important;       /* remove border */
     overflow: hidden;   /* remove iframe scrollbars */
     margin:0;

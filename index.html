@@ -6,6 +6,12 @@
     <title>Rekav Blog</title>
     <link rel="stylesheet" href="css/style.css">
     <link rel="stylesheet" href="css/article-preview.css">
+    
+        <!-- prefetch shitpost page and JS -->
+    <link rel="prefetch" href="shitpost.html">
+    <link rel="prefetch" href="js/shitpost.js">
+    
+    
 </head>
 <body>
     <header>
@@ -72,6 +78,21 @@
 		document.body.appendChild(script);
 	});
 	</script>
+	
+	<script>
+		window.addEventListener("load", () => {
+			const prefetchPage = document.createElement("link");
+			prefetchPage.rel = "prefetch";
+			prefetchPage.href = "shitpost.html";
+			document.head.appendChild(prefetchPage);
+
+			const prefetchJS = document.createElement("link");
+			prefetchJS.rel = "prefetch";
+			prefetchJS.href = "js/shitpost.js";
+			document.head.appendChild(prefetchJS);
+		});
+	</script>
+
 
 </body>
 </html>

@@ -3,12 +3,13 @@
 
 # === Configuration ===
 TARGET = terminal
-SOURCES = main.c                # Add more .c files here if you have them, e.g. terminal.c utils.c
-ASSETS = welcome.txt info.txt manifesto.txt font.ttf
+SOURCES = main.c base64.c data_codec.c settings.c             # Add more .c files here if you have them, e.g. terminal.c utils.c
+ASSETS = welcome.txt info.txt manifesto.txt font.ttf assets/bg_barbie.png assets/bg_jurassic.png
 
 EMSDK_FLAGS = \
     -s USE_SDL=2 \
     -s USE_SDL_TTF=2 \
+    -s USE_SDL_IMAGE=2 \
     -s WASM=1 \
     -s ALLOW_MEMORY_GROWTH=1 \
     -s INITIAL_MEMORY=64MB \
@@ -21,7 +22,8 @@ EMSDK_FLAGS = \
     -s STACK_OVERFLOW_CHECK=2 \
     -s GL_DEBUG=1 \
     -s ENVIRONMENT=web \
-    -s MIN_WEBGL_VERSION=2
+    -s MIN_WEBGL_VERSION=2 \
+    -s SDL2_IMAGE_FORMATS='["png"]'
 
 # No optimization — makes debugging much easier
 # (we use -O0 in DEBUG_FLAGS instead)

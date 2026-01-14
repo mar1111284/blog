@@ -1,17 +1,10 @@
-FakeOS WebAssembly Terminal - Info
+Fake WebAssembly Terminal - Info
 
-This little terminal is an experiment built with:
+This little terminal is built with:
 
-  - C language
-  - Emscripten (to run C in the browser)
-  - SDL2 + SDL_ttf for graphics and text
+- C99 language
+- Emscripten 3.x to compile C → WebAssembly
+- SDL2 2.26 + SDL_ttf 2.20 for graphics and text
+- Runs in a browser, event loop handles input & rendering
 
-Purpose:
-
-  - It's just for fun! 
-  - You can navigate through my website using commands like 'open', 'ls', or 'cat'.
-  - Think of it as a playful "FakeOS" interface.
-  - Not meant for serious computing, hacking, or productivity. 
-
-Have fun exploring!
-
+Memory lives in WebAssembly, mostly cosmetic.

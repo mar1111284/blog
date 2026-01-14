@@ -68,7 +68,7 @@ var ENVIRONMENT_IS_SHELL = false;
 
 // --pre-jses are emitted after the Module integration code, so that they can
 // refer to Module (if they choose; they can also define Module)
-// include: /tmp/tmpmo10elv1.js
+// include: /tmp/tmpa1h60cmw.js
 if (!Module["expectedDataFileDownloads"]) Module["expectedDataFileDownloads"] = 0;
 
 Module["expectedDataFileDownloads"]++;
@@ -144,6 +144,7 @@ Module["expectedDataFileDownloads"]++;
       function assert(check, msg) {
         if (!check) throw new Error(msg);
       }
+      Module["FS_createPath"]("/", "assets", true, true);
       for (var file of metadata["files"]) {
         var name = file["filename"];
         Module["addRunDependency"](`fp ${name}`);
@@ -182,43 +183,51 @@ Module["expectedDataFileDownloads"]++;
   }
   loadPackage({
     "files": [ {
-      "filename": "/font.ttf",
+      "filename": "/assets/bg_barbie.png",
       "start": 0,
-      "end": 593268
+      "end": 754245
+    }, {
+      "filename": "/assets/bg_jurassic.png",
+      "start": 754245,
+      "end": 1505122
+    }, {
+      "filename": "/font.ttf",
+      "start": 1505122,
+      "end": 2098390
     }, {
       "filename": "/info.txt",
-      "start": 593268,
-      "end": 593706
+      "start": 2098390,
+      "end": 2098676
     }, {
       "filename": "/manifesto.txt",
-      "start": 593706,
-      "end": 593870
+      "start": 2098676,
+      "end": 2099912
     }, {
       "filename": "/welcome.txt",
-      "start": 593870,
-      "end": 594212
+      "start": 2099912,
+      "end": 2100184
     } ],
-    "remote_package_size": 594212
+    "remote_package_size": 2100184
   });
 })();
 
-// end include: /tmp/tmpmo10elv1.js
-// include: /tmp/tmp2oqkr7yh.js
+// end include: /tmp/tmpa1h60cmw.js
+// include: /tmp/tmpyvq74kn0.js
 // All the pre-js content up to here must remain later on, we need to run
 // it.
 if ((typeof ENVIRONMENT_IS_WASM_WORKER != "undefined" && ENVIRONMENT_IS_WASM_WORKER) || (typeof ENVIRONMENT_IS_PTHREAD != "undefined" && ENVIRONMENT_IS_PTHREAD) || (typeof ENVIRONMENT_IS_AUDIO_WORKLET != "undefined" && ENVIRONMENT_IS_AUDIO_WORKLET)) Module["preRun"] = [];
 
 var necessaryPreJSTasks = Module["preRun"].slice();
 
-// end include: /tmp/tmp2oqkr7yh.js
-// include: /tmp/tmpltr8l1h5.js
+// end include: /tmp/tmpyvq74kn0.js
+// include: /tmp/tmpnpbu33e4.js
 if (!Module["preRun"]) throw "Module.preRun should exist because file support used it; did a pre-js delete it?";
 
 necessaryPreJSTasks.forEach(task => {
   if (Module["preRun"].indexOf(task) < 0) throw "All preRun tasks that exist before user pre-js code should remain after; did you replace Module or modify Module.preRun?";
 });
 
-// end include: /tmp/tmpltr8l1h5.js
+// end include: /tmp/tmpnpbu33e4.js
 var arguments_ = [];
 
 var thisProgram = "./this.program";
@@ -6209,6 +6218,40 @@ var _emscripten_get_num_gamepads = () => {
   return JSEvents.lastGamepadState.length;
 };
 
+var getPreloadedImageData = (path, w, h) => {
+  path = PATH_FS.resolve(path);
+  var canvas = /** @type {HTMLCanvasElement} */ (Browser.preloadedImages[path]);
+  if (!canvas) return 0;
+  var ctx = canvas.getContext("2d");
+  var image = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  var buf = _malloc(canvas.width * canvas.height * 4);
+  HEAPU8.set(image.data, buf >>> 0);
+  HEAP32[SAFE_HEAP_INDEX(HEAP32, ((w) >>> 2) >>> 0, "storing")] = canvas.width;
+  checkInt32(canvas.width);
+  HEAP32[SAFE_HEAP_INDEX(HEAP32, ((h) >>> 2) >>> 0, "storing")] = canvas.height;
+  checkInt32(canvas.height);
+  return buf;
+};
+
+function _emscripten_get_preloaded_image_data(path, w, h) {
+  path >>>= 0;
+  w >>>= 0;
+  h >>>= 0;
+  return getPreloadedImageData(UTF8ToString(path), w, h);
+}
+
+function _emscripten_get_preloaded_image_data_from_FILE(file, w, h) {
+  file >>>= 0;
+  w >>>= 0;
+  h >>>= 0;
+  var fd = _fileno(file);
+  var stream = FS.getStream(fd);
+  if (stream) {
+    return getPreloadedImageData(stream.path, w, h);
+  }
+  return 0;
+}
+
 function _emscripten_get_screen_size(width, height) {
   width >>>= 0;
   height >>>= 0;
@@ -9914,7 +9957,19 @@ function checkIncomingModuleAPI() {
 }
 
 var ASM_CONSTS = {
-  362712: $0 => {
+  383832: () => {
+    try {
+      let canvas = Module["canvas"];
+      if (!document.fullscreenElement) {
+        canvas.requestFullscreen();
+      } else {
+        document.exitFullscreen();
+      }
+    } catch (e) {
+      console.error("Fullscreen toggle error:", e);
+    }
+  },
+  384035: $0 => {
     try {
       var page = UTF8ToString($0);
       window.open("/" + page + ".html", "_blank");
@@ -9922,7 +9977,13 @@ var ASM_CONSTS = {
       console.error("cmd_open JS error:", e);
     }
   },
-  362851: $0 => {
+  384174: ($0, $1) => {
+    const key = UTF8ToString($1);
+    const value = UTF8ToString($0);
+    sessionStorage.setItem(key, value);
+    console.log("SessionStorage set:", key, value);
+  },
+  384324: $0 => {
     var str = UTF8ToString($0) + "\n\n" + "Abort/Retry/Ignore/AlwaysIgnore? [ariA] :";
     var reply = window.prompt(str, "i");
     if (reply === null) {
@@ -9930,7 +9991,7 @@ var ASM_CONSTS = {
     }
     return reply.length === 1 ? reply.charCodeAt(0) : -1;
   },
-  363066: () => {
+  384539: () => {
     if (typeof (AudioContext) !== "undefined") {
       return true;
     } else if (typeof (webkitAudioContext) !== "undefined") {
@@ -9938,7 +9999,7 @@ var ASM_CONSTS = {
     }
     return false;
   },
-  363213: () => {
+  384686: () => {
     if ((typeof (navigator.mediaDevices) !== "undefined") && (typeof (navigator.mediaDevices.getUserMedia) !== "undefined")) {
       return true;
     } else if (typeof (navigator.webkitGetUserMedia) !== "undefined") {
@@ -9946,7 +10007,7 @@ var ASM_CONSTS = {
     }
     return false;
   },
-  363447: $0 => {
+  384920: $0 => {
     if (typeof (Module["SDL2"]) === "undefined") {
       Module["SDL2"] = {};
     }
@@ -9970,11 +10031,11 @@ var ASM_CONSTS = {
     }
     return SDL2.audioContext === undefined ? -1 : 0;
   },
-  363999: () => {
+  385472: () => {
     var SDL2 = Module["SDL2"];
     return SDL2.audioContext.sampleRate;
   },
-  364067: ($0, $1, $2, $3) => {
+  385540: ($0, $1, $2, $3) => {
     var SDL2 = Module["SDL2"];
     var have_microphone = function(stream) {
       if (SDL2.capture.silenceTimer !== undefined) {
@@ -10016,7 +10077,7 @@ var ASM_CONSTS = {
       }, have_microphone, no_microphone);
     }
   },
-  365760: ($0, $1, $2, $3) => {
+  387233: ($0, $1, $2, $3) => {
     var SDL2 = Module["SDL2"];
     SDL2.audio.scriptProcessorNode = SDL2.audioContext["createScriptProcessor"]($1, 0, $0);
     SDL2.audio.scriptProcessorNode["onaudioprocess"] = function(e) {
@@ -10048,7 +10109,7 @@ var ASM_CONSTS = {
       SDL2.audio.silenceTimer = setInterval(silence_callback, ($1 / SDL2.audioContext.sampleRate) * 1e3);
     }
   },
-  366935: ($0, $1) => {
+  388408: ($0, $1) => {
     var SDL2 = Module["SDL2"];
     var numChannels = SDL2.capture.currentCaptureBuffer.numberOfChannels;
     for (var c = 0; c < numChannels; ++c) {
@@ -10067,7 +10128,7 @@ var ASM_CONSTS = {
       }
     }
   },
-  367540: ($0, $1) => {
+  389013: ($0, $1) => {
     var SDL2 = Module["SDL2"];
     var buf = $0 >>> 2;
     var numChannels = SDL2.audio.currentOutputBuffer["numberOfChannels"];
@@ -10081,7 +10142,7 @@ var ASM_CONSTS = {
       }
     }
   },
-  368029: $0 => {
+  389502: $0 => {
     var SDL2 = Module["SDL2"];
     if ($0) {
       if (SDL2.capture.silenceTimer !== undefined) {
@@ -10115,7 +10176,7 @@ var ASM_CONSTS = {
       SDL2.audioContext = undefined;
     }
   },
-  369035: ($0, $1, $2) => {
+  390508: ($0, $1, $2) => {
     var w = $0;
     var h = $1;
     var pixels = $2;
@@ -10186,7 +10247,7 @@ var ASM_CONSTS = {
     }
     SDL2.ctx.putImageData(SDL2.image, 0, 0);
   },
-  370501: ($0, $1, $2, $3, $4) => {
+  391974: ($0, $1, $2, $3, $4) => {
     var w = $0;
     var h = $1;
     var hot_x = $2;
@@ -10223,18 +10284,18 @@ var ASM_CONSTS = {
     stringToUTF8(url, urlBuf, url.length + 1);
     return urlBuf;
   },
-  371489: $0 => {
+  392962: $0 => {
     if (Module["canvas"]) {
       Module["canvas"].style["cursor"] = UTF8ToString($0);
     }
   },
-  371572: () => {
+  393045: () => {
     if (Module["canvas"]) {
       Module["canvas"].style["cursor"] = "none";
     }
   },
-  371641: () => window.innerWidth,
-  371671: () => window.innerHeight
+  393114: () => window.innerWidth,
+  393144: () => window.innerHeight
 };
 
 // Imports from the Wasm binary.
@@ -10245,6 +10306,8 @@ var _malloc = makeInvalidEarlyAccess("_malloc");
 var _strerror = makeInvalidEarlyAccess("_strerror");
 
 var _fflush = makeInvalidEarlyAccess("_fflush");
+
+var _fileno = makeInvalidEarlyAccess("_fileno");
 
 var _emscripten_stack_get_end = makeInvalidEarlyAccess("_emscripten_stack_get_end");
 
@@ -10283,6 +10346,7 @@ function assignWasmExports(wasmExports) {
   assert(typeof wasmExports["malloc"] != "undefined", "missing Wasm export: malloc");
   assert(typeof wasmExports["strerror"] != "undefined", "missing Wasm export: strerror");
   assert(typeof wasmExports["fflush"] != "undefined", "missing Wasm export: fflush");
+  assert(typeof wasmExports["fileno"] != "undefined", "missing Wasm export: fileno");
   assert(typeof wasmExports["emscripten_stack_get_end"] != "undefined", "missing Wasm export: emscripten_stack_get_end");
   assert(typeof wasmExports["emscripten_stack_get_base"] != "undefined", "missing Wasm export: emscripten_stack_get_base");
   assert(typeof wasmExports["emscripten_builtin_memalign"] != "undefined", "missing Wasm export: emscripten_builtin_memalign");
@@ -10301,6 +10365,7 @@ function assignWasmExports(wasmExports) {
   _malloc = createExportWrapper("malloc", 1);
   _strerror = createExportWrapper("strerror", 1);
   _fflush = createExportWrapper("fflush", 1);
+  _fileno = createExportWrapper("fileno", 1);
   _emscripten_stack_get_end = wasmExports["emscripten_stack_get_end"];
   _emscripten_stack_get_base = wasmExports["emscripten_stack_get_base"];
   _emscripten_builtin_memalign = createExportWrapper("emscripten_builtin_memalign", 2);
@@ -10364,6 +10429,8 @@ var wasmImports = {
   /** @export */ emscripten_get_heap_max: _emscripten_get_heap_max,
   /** @export */ emscripten_get_now: _emscripten_get_now,
   /** @export */ emscripten_get_num_gamepads: _emscripten_get_num_gamepads,
+  /** @export */ emscripten_get_preloaded_image_data: _emscripten_get_preloaded_image_data,
+  /** @export */ emscripten_get_preloaded_image_data_from_FILE: _emscripten_get_preloaded_image_data_from_FILE,
   /** @export */ emscripten_get_screen_size: _emscripten_get_screen_size,
   /** @export */ emscripten_glActiveTexture: _emscripten_glActiveTexture,
   /** @export */ emscripten_glAttachShader: _emscripten_glAttachShader,
@@ -10678,29 +10745,40 @@ var wasmImports = {
   /** @export */ fd_read: _fd_read,
   /** @export */ fd_seek: _fd_seek,
   /** @export */ fd_write: _fd_write,
+  /** @export */ invoke_i,
+  /** @export */ invoke_ii,
   /** @export */ invoke_iii,
   /** @export */ invoke_iiii,
   /** @export */ invoke_iiiii,
+  /** @export */ invoke_iiiiii,
+  /** @export */ invoke_iiiiiiiii,
+  /** @export */ invoke_iiiiiiiiii,
+  /** @export */ invoke_ji,
+  /** @export */ invoke_jiji,
   /** @export */ invoke_v,
+  /** @export */ invoke_vi,
+  /** @export */ invoke_vii,
+  /** @export */ invoke_viii,
   /** @export */ invoke_viiii,
   /** @export */ segfault
 };
 
-function invoke_viiii(index, a1, a2, a3, a4) {
+function invoke_ji(index, a1) {
   var sp = stackSave();
   try {
-    getWasmTableEntry(index)(a1, a2, a3, a4);
+    return getWasmTableEntry(index)(a1);
   } catch (e) {
     stackRestore(sp);
     if (e !== e + 0) throw e;
     _setThrew(1, 0);
+    return 0n;
   }
 }
 
-function invoke_iii(index, a1, a2) {
+function invoke_ii(index, a1) {
   var sp = stackSave();
   try {
-    return getWasmTableEntry(index)(a1, a2);
+    return getWasmTableEntry(index)(a1);
   } catch (e) {
     stackRestore(sp);
     if (e !== e + 0) throw e;
@@ -10719,10 +10797,10 @@ function invoke_iiiii(index, a1, a2, a3, a4) {
   }
 }
 
-function invoke_v(index) {
+function invoke_iiii(index, a1, a2, a3) {
   var sp = stackSave();
   try {
-    getWasmTableEntry(index)();
+    return getWasmTableEntry(index)(a1, a2, a3);
   } catch (e) {
     stackRestore(sp);
     if (e !== e + 0) throw e;
@@ -10730,10 +10808,121 @@ function invoke_v(index) {
   }
 }
 
-function invoke_iiii(index, a1, a2, a3) {
+function invoke_vi(index, a1) {
+  var sp = stackSave();
+  try {
+    getWasmTableEntry(index)(a1);
+  } catch (e) {
+    stackRestore(sp);
+    if (e !== e + 0) throw e;
+    _setThrew(1, 0);
+  }
+}
+
+function invoke_jiji(index, a1, a2, a3) {
   var sp = stackSave();
   try {
     return getWasmTableEntry(index)(a1, a2, a3);
+  } catch (e) {
+    stackRestore(sp);
+    if (e !== e + 0) throw e;
+    _setThrew(1, 0);
+    return 0n;
+  }
+}
+
+function invoke_iii(index, a1, a2) {
+  var sp = stackSave();
+  try {
+    return getWasmTableEntry(index)(a1, a2);
+  } catch (e) {
+    stackRestore(sp);
+    if (e !== e + 0) throw e;
+    _setThrew(1, 0);
+  }
+}
+
+function invoke_viii(index, a1, a2, a3) {
+  var sp = stackSave();
+  try {
+    getWasmTableEntry(index)(a1, a2, a3);
+  } catch (e) {
+    stackRestore(sp);
+    if (e !== e + 0) throw e;
+    _setThrew(1, 0);
+  }
+}
+
+function invoke_vii(index, a1, a2) {
+  var sp = stackSave();
+  try {
+    getWasmTableEntry(index)(a1, a2);
+  } catch (e) {
+    stackRestore(sp);
+    if (e !== e + 0) throw e;
+    _setThrew(1, 0);
+  }
+}
+
+function invoke_iiiiiiiiii(index, a1, a2, a3, a4, a5, a6, a7, a8, a9) {
+  var sp = stackSave();
+  try {
+    return getWasmTableEntry(index)(a1, a2, a3, a4, a5, a6, a7, a8, a9);
+  } catch (e) {
+    stackRestore(sp);
+    if (e !== e + 0) throw e;
+    _setThrew(1, 0);
+  }
+}
+
+function invoke_iiiiii(index, a1, a2, a3, a4, a5) {
+  var sp = stackSave();
+  try {
+    return getWasmTableEntry(index)(a1, a2, a3, a4, a5);
+  } catch (e) {
+    stackRestore(sp);
+    if (e !== e + 0) throw e;
+    _setThrew(1, 0);
+  }
+}
+
+function invoke_iiiiiiiii(index, a1, a2, a3, a4, a5, a6, a7, a8) {
+  var sp = stackSave();
+  try {
+    return getWasmTableEntry(index)(a1, a2, a3, a4, a5, a6, a7, a8);
+  } catch (e) {
+    stackRestore(sp);
+    if (e !== e + 0) throw e;
+    _setThrew(1, 0);
+  }
+}
+
+function invoke_i(index) {
+  var sp = stackSave();
+  try {
+    return getWasmTableEntry(index)();
+  } catch (e) {
+    stackRestore(sp);
+    if (e !== e + 0) throw e;
+    _setThrew(1, 0);
+  }
+}
+
+function invoke_viiii(index, a1, a2, a3, a4) {
+  var sp = stackSave();
+  try {
+    getWasmTableEntry(index)(a1, a2, a3, a4);
+  } catch (e) {
+    stackRestore(sp);
+    if (e !== e + 0) throw e;
+    _setThrew(1, 0);
+  }
+}
+
+function invoke_v(index) {
+  var sp = stackSave();
+  try {
+    getWasmTableEntry(index)();
   } catch (e) {
     stackRestore(sp);
     if (e !== e + 0) throw e;

@@ -2,20 +2,25 @@
 #include <SDL_ttf.h>
 #ifdef __EMSCRIPTEN__
 #include <emscripten.h>
+#include <emscripten/emscripten.h>
 #endif
 #include <string.h>
 #include <stdio.h>
 
-#define WIDTH 600
-#define HEIGHT 360
+#include "base64.h"
+#include "data_codec.h"
+#include "settings.h"
+
+#define WIDTH 800
+#define HEIGHT 480
 
 #define MAX_LINES 512
 #define MAX_LINE_LENGTH 256
 
-
 int root_active = 0;          // tracks if root is active
 int flag_js_root_activate = 0;
 int awaiting_sudo_password = 0; // tracks if sudo is waiting for password
+
 #define ROOT_PASSWORD "rekav"
 
 char input[MAX_LINE_LENGTH];
@@ -25,9 +30,6 @@ char terminal[MAX_LINES][MAX_LINE_LENGTH];
 int line_count = 0;
 int scroll_offset = 0;
 int running = 1;
-
-#include <emscripten/emscripten.h>
-
 
 // Struct to store each cmd
 typedef void (*command_func)(const char *args);
@@ -43,28 +45,122 @@ void add_line(const char *text);
 void clear_terminal();
 void cmd_help(const char *args);
 void cmd_clear(const char *args);
-void cmd_about(const char *args);
 void cmd_echo(const char *args);
 void cmd_open(const char *args);
 void execute_command(const char *cmd);
 void cmd_ls(const char *args);
 void cmd_cat(const char *args);
 void cmd_sudo(const char *args);
+void cmd_exit(const char *args);
+void cmd_settings(const char *args);
 void submit_input();
+void cmd_fullscreen(const char *args);
+
 
 Command commands[] = {
     {"help",  "Show help",      cmd_help},
     {"clear", "Clear terminal", cmd_clear},
-    {"about", "About terminal", cmd_about},
     {"echo",  "Print text",     cmd_echo},
     {"open",  "Open a page",    cmd_open},
     {"ls",    "List",    		cmd_ls},
 	{"cat",    "open file",    	cmd_cat},
     {"sudo",    "root login",   cmd_sudo},
+    {"exit",    "exit root",   cmd_exit},
+    {"settings", "Modify terminal appearance", cmd_settings},
+    {"fullscreen", "Toggle fullscreen mode", cmd_fullscreen},
+
     
 };
 
 int command_count = sizeof(commands) / sizeof(commands[0]);
+
+void cmd_settings(const char *args) {
+    char option[64];
+    char value[64];
+
+    // Display help if no args
+    if (!args || strlen(args) == 0) {
+        add_line("Usage: settings <option> <value>");
+        add_line("Options:");
+        add_line("  bg           - Background color (charcoal, dos_blue, pink, green, red)");
+        add_line("  font_color   - Font color (white, green, pink, red, orange)");
+        add_line("  font_size    - Font size (10-20)");
+        add_line("  line_height  - Line height (15-25)");
+        add_line("  theme        - Predefined themes (Default, MS-DOS, Barbie, Jurassic, Inferno)");
+        return;
+    }
+
+    // Parse option and value from args
+    int matched = sscanf(args, "%63s %63s", option, value);
+    if (matched != 2) {
+        add_line("Invalid usage! Example: settings font_size 18");
+        return;
+    }
+
+	if (strcmp(option, "bg") == 0) {
+		if (set_background_color(value)) {
+		    add_line("Background color applied.");
+		} else {
+		    add_line("Unknown background color.");
+		}
+	} 
+	else if (strcmp(option, "font_color") == 0) {
+		if (set_font_color(value)) {
+		    add_line("Font color applied.");
+		} else {
+		    add_line("Unknown font color.");
+		}
+	} 
+	else if (strcmp(option, "font_size") == 0) {
+		int size = atoi(value);
+		if (set_font_size(size)) {
+		    add_line("Font size applied.");
+		} else {
+		    add_line("Font size must be between 10 and 20.");
+		}
+	} 
+	else if (strcmp(option, "line_height") == 0) {
+		int height = atoi(value);
+		if (set_line_height(height)) {
+		    add_line("Line height applied.");
+		} else {
+		    add_line("Line height must be between 15 and 25.");
+		}
+	} 
+	else if (strcmp(option, "theme") == 0) {
+		if (apply_theme(value)) {
+		    add_line("Theme applied.");
+		} else {
+		    add_line("Unknown theme.");
+		}
+	} 
+	else {
+		add_line("Unknown setting option.");
+	}
+
+
+}
+
+void cmd_fullscreen(const char *args) {
+#ifdef __EMSCRIPTEN__
+    EM_ASM({
+        try {
+            let canvas = Module['canvas'];
+            if (!document.fullscreenElement) {
+                canvas.requestFullscreen();
+            } else {
+                document.exitFullscreen();
+            }
+        } catch(e) {
+            console.error('Fullscreen toggle error:', e);
+        }
+    });
+    add_line("Toggled fullscreen mode.");
+#else
+    add_line("Fullscreen not supported in native mode.");
+#endif
+}
+
 
 // cmd implementation
 void cmd_help(const char *args) {
@@ -74,7 +170,8 @@ void cmd_help(const char *args) {
     add_line("  open <page>    - Open a page in a new tab");
 	add_line("  ls             - List available pages and files");
     add_line("  sudo           - Root login");
-    add_line("  cat <file>     - Display the content of a file (info.txt, manifesto.txt, welcome.txt)");
+    add_line("  cat <file>     - Display the content of a file (info.txt, welcome.txt)");
+    add_line("  exit           - Exit root access");
 
 }
 
@@ -82,10 +179,15 @@ void cmd_clear(const char *args) {
     clear_terminal();
 }
 
-void cmd_about(const char *args) {
-    add_line("Fake WebAssembly Terminal");
-    add_line("Built with C, SDL2 and Emscripten");
-    add_line("Part of rekav-blog");
+void cmd_exit(const char *args) {
+    root_active = 0;  // exit root
+
+    #ifdef __EMSCRIPTEN__
+    // Clear all session storage (root + articles)
+    emscripten_run_script("sessionStorage.clear();");
+    #endif
+
+    add_line("Access: guess");
 }
 
 void cmd_echo(const char *args) {
@@ -94,23 +196,62 @@ void cmd_echo(const char *args) {
 }
 
 
+// List of allowed pages
+const char *available_pages[] = {
+    "gallery",
+    "random",
+    "shitpost",
+    "about"
+};
+const int page_count = sizeof(available_pages) / sizeof(available_pages[0]);
+
 void cmd_open(const char *args) {
     if (!args || strlen(args) == 0) {
         add_line("Usage: open <page>");
         return;
-	}
+    }
 
-	#ifdef __EMSCRIPTEN__
-	EM_ASM({
-		try {
-		    var page = UTF8ToString($0);
-		    window.open('/' + page + '.html', '_blank');
-		} catch(e) {
-		    console.error('cmd_open JS error:', e);
-		}
-	}, args);
-	#endif
+    // Copy input to mutable buffer
+    char page[128];
+    strncpy(page, args, sizeof(page) - 1);
+    page[sizeof(page) - 1] = '\0';
+
+    // Remove ".html" if user typed it
+    size_t len = strlen(page);
+    if (len > 5 && strcmp(page + len - 5, ".html") == 0) {
+        page[len - 5] = '\0';
+    }
+
+    // Check if page is in allowed list
+    int found = 0;
+    for (int i = 0; i < page_count; i++) {
+        if (strcmp(page, available_pages[i]) == 0) {
+            found = 1;
+            break;
+        }
+    }
+
+    if (!found) {
+        add_line("Page not found or unavailable.");
+        return;
+    }
+
+#ifdef __EMSCRIPTEN__
+    EM_ASM({
+        try {
+            var page = UTF8ToString($0);
+            window.open('/' + page + '.html', '_blank');
+        } catch(e) {
+            console.error('cmd_open JS error:', e);
+        }
+    }, page);
+#endif
+
+    char buf[128];
+    snprintf(buf, sizeof(buf), "Opening %s...", page);
+    add_line(buf);
 }
+
 
 
 void cmd_cat(const char *args) {
@@ -171,7 +312,7 @@ void add_line(const char *text) {
 
     // Auto-scroll if already at bottom
     int input_height = 40;
-    int line_height = 19;
+	int line_height = settings.line_height;
     int max_visible_lines = (HEIGHT - input_height) / line_height;
 
     if (scroll_offset + max_visible_lines >= line_count - 1) {
@@ -222,7 +363,17 @@ void submit_input() {
 		#ifdef __EMSCRIPTEN__
 		emscripten_run_script("sessionStorage.setItem('rekav_root_session','true'); console.log('Root session set via emscripten_run_script');");
 		#endif
-			add_line("Root access granted.");
+		
+		push_base64_to_storage(data_encoded, "rekav_data");
+		const char *articles[] = { article_0, article_1, article_2 };
+		const char *keys[]     = { "rekav_article_0", "rekav_article_1", "rekav_article_2" };
+		int article_count = 3;
+
+		for (int i = 0; i < article_count; i++) {
+			push_base64_to_storage(articles[i], keys[i]);
+		}
+
+		add_line("Root access granted.");
 
 	} else {
 		add_line("sudo: Access denied.");
@@ -251,9 +402,17 @@ void submit_input() {
 /* ---------- Rendering ---------- */
 
 void draw_text(int x, int y, const char *text) {
-    SDL_Color color = {255, 255, 255, 255}; // White text
-    SDL_Surface *surface = TTF_RenderUTF8_Blended(font, text, color);
+    if (!settings.font) return;  // Safety check
+
+    SDL_Color color = settings.font_color;
+    SDL_Surface *surface = TTF_RenderUTF8_Blended(settings.font, text, color);
+    if (!surface) return; // Fail gracefully
+
     SDL_Texture *texture = SDL_CreateTextureFromSurface(renderer, surface);
+    if (!texture) {
+        SDL_FreeSurface(surface);
+        return;
+    }
 
     SDL_Rect rect = {x, y, surface->w, surface->h};
     SDL_RenderCopy(renderer, texture, NULL, &rect);
@@ -262,13 +421,24 @@ void draw_text(int x, int y, const char *text) {
     SDL_DestroyTexture(texture);
 }
 
+
 void render() {
-    SDL_SetRenderDrawColor(renderer, 18, 18, 18, 255); // Blue background
-    SDL_RenderClear(renderer);
+	if (settings.background_texture) {
+		SDL_RenderCopy(renderer, settings.background_texture, NULL, NULL);
+	} else {
+		SDL_SetRenderDrawColor(
+		    renderer,
+		    settings.background.r,
+		    settings.background.g,
+		    settings.background.b,
+		    255
+		);
+		SDL_RenderClear(renderer);
+	}
 
     int y = 10;
     int input_height = 40;
-    int line_height = 19;
+	int line_height = settings.line_height;
     int max_visible_lines = (HEIGHT - input_height) / line_height;
 
     // Clamp scroll_offset
@@ -304,8 +474,11 @@ void render() {
     SDL_RenderPresent(renderer);
 }
 
+
+
 /* ---------- Main loop ---------- */
 void main_loop() {
+
     SDL_Event e;
     while (SDL_PollEvent(&e)) {
         if (e.type == SDL_QUIT)
@@ -357,6 +530,7 @@ int main() {
 
     SDL_Init(SDL_INIT_VIDEO);
     TTF_Init();
+    init_settings();
 
     window = SDL_CreateWindow(
         "Rekav - 2026",
