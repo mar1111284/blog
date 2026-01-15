@@ -12,13 +12,30 @@
 #include "settings.h"
 
 #define STB_IMAGE_IMPLEMENTATION
+#define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image.h"
+#include "stb_image_write.h"
 
 #define WIDTH 800
 #define HEIGHT 480
 
 #define MAX_LINES 512
 #define MAX_LINE_LENGTH 256
+#define MAX_PNG_SIZE (50 * 1024 * 1024) // 50MB for high-res export
+
+typedef struct {
+    const char *name;
+    double lat;
+    double lon;
+} City;
+
+typedef struct {
+    int chars_wide;        // number of ASCII characters per line
+    int font_size;         // pixel font size (font_6)
+    uint8_t fg[3];         // font color (RGB)
+    uint8_t bg[3];         // background color (RGB)
+    const char *filename;  // output PNG filename
+} ExportOptions;
 
 int root_active = 0;          // tracks if root is active
 int flag_js_root_activate = 0;
@@ -26,10 +43,12 @@ int awaiting_sudo_password = 0; // tracks if sudo is waiting for password
 static int translation_pending = 0;
 static int weather_forecast_pending = 0;
 static int image_processing_pending = 0;
+static int image_download_pending = 0;
 int cursor_pos = 0; // cursor position within input
 int terminal_fullscreen = 0;
 static int line_heights[MAX_LINES] = {0};
 
+TTF_Font *font_6;
 
 // Global variable for the small font
 TTF_Font *font_8 = NULL;
@@ -37,7 +56,7 @@ TTF_Font *font_8 = NULL;
 
 static SDL_Texture *pixel_art_texture = NULL;
 static SDL_Rect pixel_art_dst = {0};  // position & size
-
+static ExportOptions global_opts;
 
 #define ROOT_PASSWORD "rekav"
 
@@ -49,11 +68,9 @@ int line_count = 0;
 int scroll_offset_px = 0; // scroll in pixels
 int running = 1;
 
-typedef struct {
-    const char *name;
-    double lat;
-    double lon;
-} City;
+
+
+
 
 static City cities[] = {
     {"Paris", 48.8566, 2.3522},
@@ -150,24 +167,34 @@ static ManEntry man_db[] = {
 		"--------------------------------------------------\n"
 		"                   TO_ASCII                       \n"
 		"--------------------------------------------------\n\n"
-		"to_ascii <link>\n"
-		"  Converts an online image into ASCII art and displays it in the terminal.\n\n"
+		"to_ascii <link> [options]\n"
+		"  Converts an online image into ASCII art.\n"
+		"  By default, it displays the ASCII preview in the terminal.\n"
+		"  Optional flags allow exporting to a high-resolution PNG.\n\n"
 		"Usage:\n"
-		"  to_ascii <image_url>\n\n"
+		"  to_ascii <image_url> [options]\n\n"
+		"Options:\n"
+		"  download=1       Export the ASCII art as a high-resolution PNG.\n"
+		"  wide=<number>    Number of characters per line (ASCII width). Default: 130\n"
+		"  font_size=<num>  Font size for the exported PNG. Default: 6\n"
+		"  bg=<color>       Background color for PNG. Options: black, white, red, green, blue, pink, purple. Default: black\n"
+		"  color=<color>    Font color for PNG. Options same as bg. Default: white\n"
+		"  name=<filename>  Output PNG file name. Default: ascii_highres.png\n\n"
 		"Examples:\n"
 		"  to_ascii https://i.imgur.com/example.jpg\n"
-		"  to_ascii https://picsum.photos/800/600\n\n"
+		"  to_ascii https://picsum.photos/800/600 download=1 wide=300 font_size=15 bg=pink color=purple name=output.png\n\n"
 		"Notes:\n"
-		"  - Sorry: copy/paste of images is not supported yet.\n"
+		"  - Copy/paste of images is not supported.\n"
 		"  - Images must be accessible via direct URL.\n"
 		"  - Some websites block image access due to CORS restrictions.\n"
 		"  - Working sources usually include Imgur, Picsum, Wikimedia.\n\n"
 		"Image Tips:\n"
-		"  - Use small to medium images (not too large).\n"
+		"  - Use small to medium images for faster processing.\n"
 		"  - High-contrast photos give the best results.\n"
-		"  - Avoid flat colors or very dark images.\n\n"
+		"  - Avoid flat colors or very dark images.\n"
+		"  - Increasing 'wide' and 'font_size' improves export resolution.\n\n"
 		"--------------------------------------------------\n"
-		"          Type 'to_ascii <image_url>'              \n"
+		"          Type 'to_ascii <image_url> [options]'   \n"
 		"--------------------------------------------------\n"
 		"\n"
 	},
@@ -176,7 +203,6 @@ static ManEntry man_db[] = {
 
 
 static const int man_db_size = sizeof(man_db) / sizeof(man_db[0]);
-
 
 // cmd prototypes 
 void add_line(const char *text);
@@ -202,7 +228,7 @@ int poll_image_result(void);
 int poll_forecast_result(void);
 void process_image_to_pixels(unsigned char *raw_data, int raw_size);
 void add_line_with_font(const char *text, TTF_Font *font_override, int line_height_override);
-
+void export_ascii(unsigned char *raw_data, int raw_size, ExportOptions opts);
 
 Command commands[] = {
     {"help",  "Show help",      cmd_help},
@@ -232,6 +258,175 @@ int get_total_content_height(void) {
         h += line_heights[i];
     }
     return h;
+}
+
+
+
+typedef struct {
+    int chars_wide;       // number of characters in width
+    int chars_high;       // number of characters in height
+    int font_size;        // font_6
+    uint8_t fg[3];        // font color
+    uint8_t bg[3];        // background color
+    const char *filename; // PNG filename
+} TestExportOptions;
+
+typedef struct {
+    unsigned char *buf;
+    size_t size;
+    size_t capacity;
+} mem_writer_t;
+
+void mem_write_func(void *context, void *data, int size) {
+    mem_writer_t *w = (mem_writer_t *)context;
+    if (w->size + size > w->capacity) return;
+    memcpy(w->buf + w->size, data, size);
+    w->size += size;
+}
+void export_ascii(unsigned char *raw_data, int raw_size, ExportOptions opts) {
+    add_line("export_ascii: starting ASCII PNG export...");
+
+    if (raw_size <= 0 || raw_size > 20 * 1024 * 1024) {
+        add_line("export_ascii: invalid image size");
+        return;
+    }
+
+    int width, height, channels;
+    unsigned char *pixels = stbi_load_from_memory(raw_data, raw_size, &width, &height, &channels, 4);
+    if (!pixels) {
+        add_line("export_ascii: decode failed");
+        return;
+    }
+
+    // --- Settings ---
+    int target_width = opts.chars_wide;
+    const float char_aspect = 2.2f;
+    int target_height = (int)((float)(height * target_width) / (float)width / char_aspect);
+
+    const char *ramp = " .'`^\",:;Il!i~+_-?][}{1)(|\\/*tfjrxnuvczXYUJCLQ0OZmwqpdbkhao*#MW&8%B@$";
+    int ramp_len = strlen(ramp);
+
+    // --- Allocate ASCII buffer ---
+    size_t buf_size = (target_width + 1LL) * target_height + 1;
+    char *ascii = (char *)malloc(buf_size);
+    if (!ascii) {
+        add_line("export_ascii: cannot allocate ASCII buffer");
+        stbi_image_free(pixels);
+        return;
+    }
+    char *p = ascii;
+
+    // --- Dithering arrays ---
+    float *error = (float *)calloc(target_width + 4, sizeof(float));
+    float *next_row = (float *)calloc(target_width + 4, sizeof(float));
+
+    // --- ASCII conversion ---
+    for (int y = 0; y < target_height; y++) {
+        for (int x = 0; x < target_width; x++) {
+            int sx = (x * width) / target_width;
+            int sy = (y * height) / target_height;
+            unsigned char *px = pixels + (sy * width + sx) * 4;
+
+            float r = px[0], g = px[1], b = px[2];
+            float gray = 0.299f*r + 0.587f*g + 0.114f*b + error[x+1];
+
+            if (gray < 0) gray = 0;
+            if (gray > 255) gray = 255;
+
+            int idx = (int)(gray * ramp_len / 256.0f);
+            if (idx >= ramp_len) idx = ramp_len-1;
+            if (idx < 0) idx = 0;
+
+            *p++ = ramp[idx];
+
+            float quant_error = gray - (idx * 255.0f / (ramp_len-1));
+            error[x+1]      += quant_error * 7.0f/16.0f;    // right
+            next_row[x]      += quant_error * 3.0f/16.0f;    // below-left
+            next_row[x+1]    += quant_error * 5.0f/16.0f;    // below
+            next_row[x+2]    += quant_error * 1.0f/16.0f;    // below-right
+        }
+        *p++ = '\n';
+        memcpy(error, next_row, (target_width+4)*sizeof(float));
+        memset(next_row, 0, (target_width+4)*sizeof(float));
+    }
+    free(error);
+    free(next_row);
+    *p = '\0';
+
+    // --- Initialize TTF and surface ---
+    if (TTF_WasInit() == 0) TTF_Init();
+    char font_path[256];
+    snprintf(font_path, sizeof(font_path), "font.ttf"); // adjust font
+    TTF_Font *font = TTF_OpenFont(font_path, opts.font_size);
+    if (!font) {
+        add_line("export_ascii: failed to load font");
+        free(ascii);
+        stbi_image_free(pixels);
+        return;
+    }
+
+    int char_width, char_height;
+    TTF_SizeUTF8(font, "A", &char_width, NULL);
+    char_height = TTF_FontLineSkip(font);
+
+    int img_width  = target_width * char_width;
+    int img_height = target_height * char_height;
+
+    SDL_Surface *final_surf = SDL_CreateRGBSurfaceWithFormat(0, img_width, img_height, 32, SDL_PIXELFORMAT_RGBA32);
+    SDL_FillRect(final_surf, NULL, SDL_MapRGBA(final_surf->format, opts.bg[0], opts.bg[1], opts.bg[2], 255));
+
+    // --- Render ASCII onto surface ---
+    int y_offset = 0;
+    char *line = ascii;
+    while (*line) {
+        char *nl = strchr(line, '\n');
+        if (!nl) nl = line + strlen(line);
+        int len = nl - line;
+        char tmp[1024];
+        if (len >= sizeof(tmp)) len = sizeof(tmp)-1;
+        strncpy(tmp, line, len);
+        tmp[len] = '\0';
+
+        SDL_Color fg = {opts.fg[0], opts.fg[1], opts.fg[2], 255};
+        SDL_Surface *surf = TTF_RenderUTF8_Blended(font, tmp, fg);
+        if (surf) {
+            SDL_Rect dst = {0, y_offset, surf->w, surf->h};
+            SDL_BlitSurface(surf, NULL, final_surf, &dst);
+            SDL_FreeSurface(surf);
+        }
+        y_offset += char_height;
+        line = (*nl) ? nl+1 : nl;
+    }
+
+    TTF_CloseFont(font);
+    free(ascii);
+    stbi_image_free(pixels);
+
+    // --- Write PNG to memory ---
+    mem_writer_t writer;
+    writer.buf = malloc(MAX_PNG_SIZE);
+    writer.size = 0;
+    writer.capacity = MAX_PNG_SIZE;
+    stbi_write_png_to_func(mem_write_func, &writer, final_surf->w, final_surf->h, 4, final_surf->pixels, final_surf->pitch);
+    SDL_FreeSurface(final_surf);
+
+    // --- Trigger download ---
+    EM_ASM_({
+        const dataPtr = $0;
+        const dataLen = $1;
+        const filename = UTF8ToString($2);
+        const bytes = new Uint8Array(Module.HEAPU8.buffer, dataPtr, dataLen);
+        const blob = new Blob([bytes], {type:"image/png"});
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = filename;
+        a.click();
+        URL.revokeObjectURL(url);
+    }, writer.buf, (int)writer.size, opts.filename);
+
+    free(writer.buf);
+    add_line("export_ascii: PNG download triggered!");
 }
 
 
@@ -408,35 +603,91 @@ void process_image_to_pixels(unsigned char *raw_data, int raw_size) {
     add_line("Ultra-detailed ASCII complete!");
 }
 
+void parse_color(const char *name, uint8_t *r, uint8_t *g, uint8_t *b) {
+    if (strcmp(name, "black") == 0) { *r=0; *g=0; *b=0; }
+    else if (strcmp(name, "white") == 0) { *r=255; *g=255; *b=255; }
+    else if (strcmp(name, "red") == 0) { *r=255; *g=0; *b=0; }
+    else if (strcmp(name, "green") == 0) { *r=0; *g=255; *b=0; }
+    else if (strcmp(name, "blue") == 0) { *r=0; *g=0; *b=255; }
+    else if (strcmp(name, "pink") == 0) { *r=255; *g=192; *b=203; }
+    else if (strcmp(name, "purple") == 0) { *r=128; *g=0; *b=128; }
+    else { *r=255; *g=255; *b=255; } // default white
+}
+
 // Command: to_ascii <image_url>
 void cmd_to_ascii(const char *args) {
     image_processing_pending = 1;  // flag for polling
 
     if (!args || strlen(args) == 0) {
-        add_line("Usage: to_ascii <image_url>");
-        add_line("Example: to_ascii https://i.imgur.com/example.jpg");
+        add_line("Usage: to_ascii <image_url> [download=1 wide=300 font_size=6 bg=black color=white name=output]");
         image_processing_pending = 0;
         return;
     }
 
-    // Very simple validation - just make sure it looks like a URL
-    if (strncmp(args, "http://", 7) != 0 && strncmp(args, "https://", 8) != 0) {
+    // Split first word (URL) and the rest (options)
+    char url[1024];
+    char options_str[1024] = {0};
+    sscanf(args, "%1023s %[^\n]", url, options_str);
+
+    // Basic URL validation
+    if (strncmp(url, "http://", 7) != 0 && strncmp(url, "https://", 8) != 0) {
         add_line("Error: Please provide a valid http/https URL");
         image_processing_pending = 0;
         return;
     }
 
+    // Parse options
+    ExportOptions opts;
+    opts.chars_wide = 130;    // default
+    opts.font_size = 6;       // default
+    opts.fg[0]=255; opts.fg[1]=255; opts.fg[2]=255; // default white
+    opts.bg[0]=0; opts.bg[1]=0; opts.bg[2]=0;       // default black
+    opts.filename = "ascii_highres.png";
+
+    image_download_pending = 0;
+
+    char key[64], val[64];
+    const char *ptr = options_str;
+    while (*ptr) {
+        if (sscanf(ptr, "%63[^=]=%63s", key, val) == 2) {
+            if (strcmp(key, "download") == 0 && atoi(val) != 0) {
+                image_download_pending = 1;
+            } else if (strcmp(key, "wide") == 0) {
+                opts.chars_wide = atoi(val);
+            } else if (strcmp(key, "font_size") == 0) {
+                opts.font_size = atoi(val);
+            } else if (strcmp(key, "bg") == 0) {
+                parse_color(val, &opts.bg[0], &opts.bg[1], &opts.bg[2]);
+            } else if (strcmp(key, "color") == 0) {
+                parse_color(val, &opts.fg[0], &opts.fg[1], &opts.fg[2]);
+            } else if (strcmp(key, "name") == 0) {
+                opts.filename = strdup(val);
+            }
+        }
+
+        // Skip to next option
+        const char *next = strchr(ptr, ' ');
+        if (!next) break;
+        ptr = next + 1;
+    }
+
 #ifdef __EMSCRIPTEN__
-    // Store the request in sessionStorage - JS will pick it up
+    // Store the request in sessionStorage
     EM_ASM({
         const url = UTF8ToString($0);
         sessionStorage.setItem("rekav_image_request", url);
         console.log("C -> JS image request queued:", url);
-    }, args);
+    }, url);
 #endif
 
     add_line("Fetching and processing image...");
     add_line("(This may take a few seconds depending on image size)");
+
+    // Save opts globally if download is requested
+    if (image_download_pending) {
+        // copy opts to a global variable for poll_image_result
+        global_opts = opts;
+    }
 }
 
 void cmd_weather(const char *args) {
@@ -719,6 +970,11 @@ int poll_image_result(void) {
     // Now process
     process_image_to_pixels(image_raw, decoded_bytes);
 
+	if (image_download_pending) {
+		export_ascii(image_raw, decoded_bytes, global_opts);
+		image_download_pending = 0;
+	}
+
     return 1;
 }
 #endif
@@ -807,12 +1063,6 @@ int poll_forecast_result(void) {
     return 0;
 }
 #endif
-
-
-
-
-
-
 
 
 void cmd_fullscreen(const char *args) {
@@ -1346,6 +1596,20 @@ int main() {
     SDL_Init(SDL_INIT_VIDEO);
     TTF_Init();
     init_settings();
+    
+    EM_ASM({
+		const canvas = Module.canvas;
+		const dpr = window.devicePixelRatio || 1;
+
+		const width  = canvas.clientWidth  * dpr;
+		const height = canvas.clientHeight * dpr;
+
+		if (canvas.width !== width || canvas.height !== height) {
+		    canvas.width  = width;
+		    canvas.height = height;
+		}
+	});
+
 
     window = SDL_CreateWindow(
         "Rekav - 2026",
@@ -1357,6 +1621,11 @@ int main() {
     );
 
     renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
+	int rw, rh;
+	SDL_GetRendererOutputSize(renderer, &rw, &rh);
+	SDL_RenderSetLogicalSize(renderer, rw, rh);
+
+	SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "0");
 
     font = TTF_OpenFont("font.ttf", 15); // Bigger font
     if (!font) {
@@ -1370,6 +1639,14 @@ int main() {
 		// Optional: fallback to main font or error handling
 		// font_8 = font;  // use main font as fallback
 	}
+	
+	font_6 = TTF_OpenFont("font.ttf", 6);
+	if (!font_6) {
+		printf("Failed to load small font size 6: %s\n", TTF_GetError());
+		// Optional: fallback to main font or error handling
+		// font_8 = font;  // use main font as fallback
+	}
+	
     TTF_SetFontStyle(font, TTF_STYLE_BOLD); // Bold font
 
     SDL_StartTextInput();
