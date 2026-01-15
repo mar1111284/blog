@@ -6,24 +6,27 @@ TARGET = terminal
 SOURCES = main.c base64.c data_codec.c settings.c
 ASSETS = welcome.txt info.txt manifesto.txt font.ttf assets/bg_barbie.png assets/bg_jurassic.png
 
+# Define the flags as a variable (no indentation here)
 EMSDK_FLAGS = \
-    -s USE_SDL=2 \
-    -s USE_SDL_TTF=2 \
-    -s USE_SDL_IMAGE=2 \
-    -s WASM=1 \
-    -s ALLOW_MEMORY_GROWTH=1 \
-    -s INITIAL_MEMORY=64MB \
-    -s MAXIMUM_MEMORY=4GB \
-    -s EXPORTED_FUNCTIONS='["_main"]' \
-    -s EXPORTED_RUNTIME_METHODS='["cwrap", "ccall", "cwrap"]' \
-    -s ERROR_ON_UNDEFINED_SYMBOLS=0 \
-    -s ASSERTIONS=2 \
-    -s SAFE_HEAP=1 \
-    -s STACK_OVERFLOW_CHECK=2 \
-    -s GL_DEBUG=1 \
-    -s ENVIRONMENT=web \
-    -s MIN_WEBGL_VERSION=2 \
-    -s SDL2_IMAGE_FORMATS='["png"]' \
+	-s USE_SDL=2 \
+	-s USE_SDL_TTF=2 \
+	-s USE_SDL_IMAGE=2 \
+	-s WASM=1 \
+	-s INITIAL_MEMORY=64MB \
+	-s STACK_SIZE=1048576 \
+	-s TOTAL_STACK=1048576 \
+	-s ALLOW_MEMORY_GROWTH=1 \
+	-s MAXIMUM_MEMORY=4GB \
+	-s EXPORTED_FUNCTIONS='["_main"]' \
+	-s EXPORTED_RUNTIME_METHODS='["cwrap", "ccall", "cwrap"]' \
+	-s ERROR_ON_UNDEFINED_SYMBOLS=0 \
+	-s ASSERTIONS=2 \
+	-s SAFE_HEAP=1 \
+	-s STACK_OVERFLOW_CHECK=2 \
+	-s GL_DEBUG=1 \
+	-s ENVIRONMENT=web \
+	-s MIN_WEBGL_VERSION=2 \
+	-s SDL2_IMAGE_FORMATS='["png"]'
 
 # Debug flags
 DEBUG_FLAGS = -gsource-map -O0 -s ASSERTIONS=2 -s SAFE_HEAP=1 -s STACK_OVERFLOW_CHECK=2

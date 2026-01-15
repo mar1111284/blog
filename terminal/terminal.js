@@ -68,7 +68,7 @@ var ENVIRONMENT_IS_SHELL = false;
 
 // --pre-jses are emitted after the Module integration code, so that they can
 // refer to Module (if they choose; they can also define Module)
-// include: /tmp/tmp4uou9uzh.js
+// include: /tmp/tmpx1dbu96s.js
 if (!Module["expectedDataFileDownloads"]) Module["expectedDataFileDownloads"] = 0;
 
 Module["expectedDataFileDownloads"]++;
@@ -211,23 +211,23 @@ Module["expectedDataFileDownloads"]++;
   });
 })();
 
-// end include: /tmp/tmp4uou9uzh.js
-// include: /tmp/tmp2g9mefsm.js
+// end include: /tmp/tmpx1dbu96s.js
+// include: /tmp/tmpgz8_piz7.js
 // All the pre-js content up to here must remain later on, we need to run
 // it.
 if ((typeof ENVIRONMENT_IS_WASM_WORKER != "undefined" && ENVIRONMENT_IS_WASM_WORKER) || (typeof ENVIRONMENT_IS_PTHREAD != "undefined" && ENVIRONMENT_IS_PTHREAD) || (typeof ENVIRONMENT_IS_AUDIO_WORKLET != "undefined" && ENVIRONMENT_IS_AUDIO_WORKLET)) Module["preRun"] = [];
 
 var necessaryPreJSTasks = Module["preRun"].slice();
 
-// end include: /tmp/tmp2g9mefsm.js
-// include: /tmp/tmpqm3ou6hr.js
+// end include: /tmp/tmpgz8_piz7.js
+// include: /tmp/tmp6tb4f5xe.js
 if (!Module["preRun"]) throw "Module.preRun should exist because file support used it; did a pre-js delete it?";
 
 necessaryPreJSTasks.forEach(task => {
   if (Module["preRun"].indexOf(task) < 0) throw "All preRun tasks that exist before user pre-js code should remain after; did you replace Module or modify Module.preRun?";
 });
 
-// end include: /tmp/tmpqm3ou6hr.js
+// end include: /tmp/tmp6tb4f5xe.js
 var arguments_ = [];
 
 var thisProgram = "./this.program";
@@ -1044,6 +1044,93 @@ var INT53_MIN = -9007199254740992;
 
 var bigintToI53Checked = num => (num < INT53_MIN || num > INT53_MAX) ? NaN : Number(num);
 
+var UTF8Decoder = globalThis.TextDecoder && new TextDecoder;
+
+var findStringEnd = (heapOrArray, idx, maxBytesToRead, ignoreNul) => {
+  var maxIdx = idx + maxBytesToRead;
+  if (ignoreNul) return maxIdx;
+  // TextDecoder needs to know the byte length in advance, it doesn't stop on
+  // null terminator by itself.
+  // As a tiny code save trick, compare idx against maxIdx using a negation,
+  // so that maxBytesToRead=undefined/NaN means Infinity.
+  while (heapOrArray[idx] && !(idx >= maxIdx)) ++idx;
+  return idx;
+};
+
+/**
+     * Given a pointer 'idx' to a null-terminated UTF8-encoded string in the given
+     * array that contains uint8 values, returns a copy of that string as a
+     * Javascript String object.
+     * heapOrArray is either a regular array, or a JavaScript typed array view.
+     * @param {number=} idx
+     * @param {number=} maxBytesToRead
+     * @param {boolean=} ignoreNul - If true, the function will not stop on a NUL character.
+     * @return {string}
+     */ var UTF8ArrayToString = (heapOrArray, idx = 0, maxBytesToRead, ignoreNul) => {
+  idx >>>= 0;
+  var endPtr = findStringEnd(heapOrArray, idx, maxBytesToRead, ignoreNul);
+  // When using conditional TextDecoder, skip it for short strings as the overhead of the native call is not worth it.
+  if (endPtr - idx > 16 && heapOrArray.buffer && UTF8Decoder) {
+    return UTF8Decoder.decode(heapOrArray.subarray(idx, endPtr));
+  }
+  var str = "";
+  while (idx < endPtr) {
+    // For UTF8 byte structure, see:
+    // http://en.wikipedia.org/wiki/UTF-8#Description
+    // https://www.ietf.org/rfc/rfc2279.txt
+    // https://tools.ietf.org/html/rfc3629
+    var u0 = heapOrArray[idx++];
+    if (!(u0 & 128)) {
+      str += String.fromCharCode(u0);
+      continue;
+    }
+    var u1 = heapOrArray[idx++] & 63;
+    if ((u0 & 224) == 192) {
+      str += String.fromCharCode(((u0 & 31) << 6) | u1);
+      continue;
+    }
+    var u2 = heapOrArray[idx++] & 63;
+    if ((u0 & 240) == 224) {
+      u0 = ((u0 & 15) << 12) | (u1 << 6) | u2;
+    } else {
+      if ((u0 & 248) != 240) warnOnce("Invalid UTF-8 leading byte " + ptrToString(u0) + " encountered when deserializing a UTF-8 string in wasm memory to a JS string!");
+      u0 = ((u0 & 7) << 18) | (u1 << 12) | (u2 << 6) | (heapOrArray[idx++] & 63);
+    }
+    if (u0 < 65536) {
+      str += String.fromCharCode(u0);
+    } else {
+      var ch = u0 - 65536;
+      str += String.fromCharCode(55296 | (ch >> 10), 56320 | (ch & 1023));
+    }
+  }
+  return str;
+};
+
+/**
+     * Given a pointer 'ptr' to a null-terminated UTF8-encoded string in the
+     * emscripten HEAP, returns a copy of that string as a Javascript String object.
+     *
+     * @param {number} ptr
+     * @param {number=} maxBytesToRead - An optional length that specifies the
+     *   maximum number of bytes to read. You can omit this parameter to scan the
+     *   string until the first 0 byte. If maxBytesToRead is passed, and the string
+     *   at [ptr, ptr+maxBytesToReadr[ contains a null byte in the middle, then the
+     *   string will cut short at that byte index.
+     * @param {boolean=} ignoreNul - If true, the function will not stop on a NUL character.
+     * @return {string}
+     */ var UTF8ToString = (ptr, maxBytesToRead, ignoreNul) => {
+  assert(typeof ptr == "number", `UTF8ToString expects a number (got ${typeof ptr})`);
+  ptr >>>= 0;
+  return ptr ? UTF8ArrayToString(HEAPU8, ptr, maxBytesToRead, ignoreNul) : "";
+};
+
+function ___assert_fail(condition, filename, line, func) {
+  condition >>>= 0;
+  filename >>>= 0;
+  func >>>= 0;
+  return abort(`Assertion failed: ${UTF8ToString(condition)}, at: ` + [ filename ? UTF8ToString(filename) : "unknown filename", line, func ? UTF8ToString(func) : "unknown function" ]);
+}
+
 function ___handle_stack_overflow(requested) {
   requested >>>= 0;
   var base = _emscripten_stack_get_base();
@@ -1177,68 +1264,6 @@ var PATH_FS = {
     outputParts = outputParts.concat(toParts.slice(samePartsLength));
     return outputParts.join("/");
   }
-};
-
-var UTF8Decoder = globalThis.TextDecoder && new TextDecoder;
-
-var findStringEnd = (heapOrArray, idx, maxBytesToRead, ignoreNul) => {
-  var maxIdx = idx + maxBytesToRead;
-  if (ignoreNul) return maxIdx;
-  // TextDecoder needs to know the byte length in advance, it doesn't stop on
-  // null terminator by itself.
-  // As a tiny code save trick, compare idx against maxIdx using a negation,
-  // so that maxBytesToRead=undefined/NaN means Infinity.
-  while (heapOrArray[idx] && !(idx >= maxIdx)) ++idx;
-  return idx;
-};
-
-/**
-     * Given a pointer 'idx' to a null-terminated UTF8-encoded string in the given
-     * array that contains uint8 values, returns a copy of that string as a
-     * Javascript String object.
-     * heapOrArray is either a regular array, or a JavaScript typed array view.
-     * @param {number=} idx
-     * @param {number=} maxBytesToRead
-     * @param {boolean=} ignoreNul - If true, the function will not stop on a NUL character.
-     * @return {string}
-     */ var UTF8ArrayToString = (heapOrArray, idx = 0, maxBytesToRead, ignoreNul) => {
-  idx >>>= 0;
-  var endPtr = findStringEnd(heapOrArray, idx, maxBytesToRead, ignoreNul);
-  // When using conditional TextDecoder, skip it for short strings as the overhead of the native call is not worth it.
-  if (endPtr - idx > 16 && heapOrArray.buffer && UTF8Decoder) {
-    return UTF8Decoder.decode(heapOrArray.subarray(idx, endPtr));
-  }
-  var str = "";
-  while (idx < endPtr) {
-    // For UTF8 byte structure, see:
-    // http://en.wikipedia.org/wiki/UTF-8#Description
-    // https://www.ietf.org/rfc/rfc2279.txt
-    // https://tools.ietf.org/html/rfc3629
-    var u0 = heapOrArray[idx++];
-    if (!(u0 & 128)) {
-      str += String.fromCharCode(u0);
-      continue;
-    }
-    var u1 = heapOrArray[idx++] & 63;
-    if ((u0 & 224) == 192) {
-      str += String.fromCharCode(((u0 & 31) << 6) | u1);
-      continue;
-    }
-    var u2 = heapOrArray[idx++] & 63;
-    if ((u0 & 240) == 224) {
-      u0 = ((u0 & 15) << 12) | (u1 << 6) | u2;
-    } else {
-      if ((u0 & 248) != 240) warnOnce("Invalid UTF-8 leading byte " + ptrToString(u0) + " encountered when deserializing a UTF-8 string in wasm memory to a JS string!");
-      u0 = ((u0 & 7) << 18) | (u1 << 12) | (u2 << 6) | (heapOrArray[idx++] & 63);
-    }
-    if (u0 < 65536) {
-      str += String.fromCharCode(u0);
-    } else {
-      var ch = u0 - 65536;
-      str += String.fromCharCode(55296 | (ch >> 10), 56320 | (ch & 1023));
-    }
-  }
-  return str;
 };
 
 var FS_stdin_getChar_buffer = [];
@@ -1825,24 +1850,6 @@ var FS_getMode = (canRead, canWrite) => {
   if (canRead) mode |= 292 | 73;
   if (canWrite) mode |= 146;
   return mode;
-};
-
-/**
-     * Given a pointer 'ptr' to a null-terminated UTF8-encoded string in the
-     * emscripten HEAP, returns a copy of that string as a Javascript String object.
-     *
-     * @param {number} ptr
-     * @param {number=} maxBytesToRead - An optional length that specifies the
-     *   maximum number of bytes to read. You can omit this parameter to scan the
-     *   string until the first 0 byte. If maxBytesToRead is passed, and the string
-     *   at [ptr, ptr+maxBytesToReadr[ contains a null byte in the middle, then the
-     *   string will cut short at that byte index.
-     * @param {boolean=} ignoreNul - If true, the function will not stop on a NUL character.
-     * @return {string}
-     */ var UTF8ToString = (ptr, maxBytesToRead, ignoreNul) => {
-  assert(typeof ptr == "number", `UTF8ToString expects a number (got ${typeof ptr})`);
-  ptr >>>= 0;
-  return ptr ? UTF8ArrayToString(HEAPU8, ptr, maxBytesToRead, ignoreNul) : "";
 };
 
 var strError = errno => UTF8ToString(_strerror(errno));
@@ -4139,7 +4146,7 @@ var handleException = e => {
   checkStackCookie();
   if (e instanceof WebAssembly.RuntimeError) {
     if (_emscripten_stack_get_current() <= 0) {
-      err("Stack overflow detected.  You can try increasing -sSTACK_SIZE (currently set to 65536)");
+      err("Stack overflow detected.  You can try increasing -sSTACK_SIZE (currently set to 1048576)");
     }
   }
   quit_(1, e);
@@ -9953,7 +9960,12 @@ function checkIncomingModuleAPI() {
 }
 
 var ASM_CONSTS = {
-  386200: ($0, $1, $2) => {
+  1375688: $0 => {
+    const url = UTF8ToString($0);
+    sessionStorage.setItem("rekav_image_request", url);
+    console.log("C -> JS image request queued:", url);
+  },
+  1375825: ($0, $1, $2) => {
     const lat = $0;
     const lon = $1;
     const city = UTF8ToString($2);
@@ -9964,7 +9976,7 @@ var ASM_CONSTS = {
     }));
     console.log("C -> JS weather request queued:", city, lat, lon);
   },
-  386443: ($0, $1, $2) => {
+  1376068: ($0, $1, $2) => {
     const source = UTF8ToString($0);
     const target = UTF8ToString($1);
     const text = UTF8ToString($2);
@@ -9975,7 +9987,20 @@ var ASM_CONSTS = {
     }));
     console.log("C -> JS translate request queued:", source, target, text);
   },
-  386733: ($0, $1) => {
+  1376358: ($0, $1) => {
+    const out_ptr = $0;
+    const maxlen = $1;
+    const res = sessionStorage.getItem("rekav_image_array");
+    if (!res) return;
+    const len = lengthBytesUTF8(res) + 1;
+    if (len > maxlen) {
+      stringToUTF8("TOO_LARGE", out_ptr, maxlen);
+      return;
+    }
+    stringToUTF8(res, out_ptr, maxlen);
+    sessionStorage.removeItem("rekav_image_array");
+  },
+  1376672: ($0, $1) => {
     const out_ptr = $0;
     const maxlen = $1;
     const res = sessionStorage.getItem("rekav_translate_result");
@@ -9985,7 +10010,7 @@ var ASM_CONSTS = {
     stringToUTF8(res, out_ptr, maxlen);
     sessionStorage.removeItem("rekav_translate_result");
   },
-  387009: ($0, $1) => {
+  1376948: ($0, $1) => {
     const out_ptr = $0;
     const maxlen = $1;
     const res = sessionStorage.getItem("rekav_weather_result");
@@ -9995,7 +10020,7 @@ var ASM_CONSTS = {
     stringToUTF8(res, out_ptr, maxlen);
     sessionStorage.removeItem("rekav_weather_result");
   },
-  387281: () => {
+  1377220: () => {
     try {
       let canvas = Module["canvas"];
       if (!document.fullscreenElement) {
@@ -10007,7 +10032,7 @@ var ASM_CONSTS = {
       console.error("Fullscreen toggle error:", e);
     }
   },
-  387484: $0 => {
+  1377423: $0 => {
     try {
       var page = UTF8ToString($0);
       window.open("/" + page + ".html", "_blank");
@@ -10015,13 +10040,22 @@ var ASM_CONSTS = {
       console.error("cmd_open JS error:", e);
     }
   },
-  387623: ($0, $1) => {
+  1377562: () => {
+    try {
+      let canvas = Module["canvas"];
+      Module.isFullscreen = (document.fullscreenElement === canvas);
+    } catch (e) {
+      console.error(e);
+    }
+  },
+  1377699: () => Module.isFullscreen ? 1 : 0,
+  1377739: ($0, $1) => {
     const key = UTF8ToString($1);
     const value = UTF8ToString($0);
     sessionStorage.setItem(key, value);
     console.log("SessionStorage set:", key, value);
   },
-  387773: $0 => {
+  1377889: $0 => {
     var str = UTF8ToString($0) + "\n\n" + "Abort/Retry/Ignore/AlwaysIgnore? [ariA] :";
     var reply = window.prompt(str, "i");
     if (reply === null) {
@@ -10029,7 +10063,7 @@ var ASM_CONSTS = {
     }
     return reply.length === 1 ? reply.charCodeAt(0) : -1;
   },
-  387988: () => {
+  1378104: () => {
     if (typeof (AudioContext) !== "undefined") {
       return true;
     } else if (typeof (webkitAudioContext) !== "undefined") {
@@ -10037,7 +10071,7 @@ var ASM_CONSTS = {
     }
     return false;
   },
-  388135: () => {
+  1378251: () => {
     if ((typeof (navigator.mediaDevices) !== "undefined") && (typeof (navigator.mediaDevices.getUserMedia) !== "undefined")) {
       return true;
     } else if (typeof (navigator.webkitGetUserMedia) !== "undefined") {
@@ -10045,7 +10079,7 @@ var ASM_CONSTS = {
     }
     return false;
   },
-  388369: $0 => {
+  1378485: $0 => {
     if (typeof (Module["SDL2"]) === "undefined") {
       Module["SDL2"] = {};
     }
@@ -10069,11 +10103,11 @@ var ASM_CONSTS = {
     }
     return SDL2.audioContext === undefined ? -1 : 0;
   },
-  388921: () => {
+  1379037: () => {
     var SDL2 = Module["SDL2"];
     return SDL2.audioContext.sampleRate;
   },
-  388989: ($0, $1, $2, $3) => {
+  1379105: ($0, $1, $2, $3) => {
     var SDL2 = Module["SDL2"];
     var have_microphone = function(stream) {
       if (SDL2.capture.silenceTimer !== undefined) {
@@ -10115,7 +10149,7 @@ var ASM_CONSTS = {
       }, have_microphone, no_microphone);
     }
   },
-  390682: ($0, $1, $2, $3) => {
+  1380798: ($0, $1, $2, $3) => {
     var SDL2 = Module["SDL2"];
     SDL2.audio.scriptProcessorNode = SDL2.audioContext["createScriptProcessor"]($1, 0, $0);
     SDL2.audio.scriptProcessorNode["onaudioprocess"] = function(e) {
@@ -10147,7 +10181,7 @@ var ASM_CONSTS = {
       SDL2.audio.silenceTimer = setInterval(silence_callback, ($1 / SDL2.audioContext.sampleRate) * 1e3);
     }
   },
-  391857: ($0, $1) => {
+  1381973: ($0, $1) => {
     var SDL2 = Module["SDL2"];
     var numChannels = SDL2.capture.currentCaptureBuffer.numberOfChannels;
     for (var c = 0; c < numChannels; ++c) {
@@ -10166,7 +10200,7 @@ var ASM_CONSTS = {
       }
     }
   },
-  392462: ($0, $1) => {
+  1382578: ($0, $1) => {
     var SDL2 = Module["SDL2"];
     var buf = $0 >>> 2;
     var numChannels = SDL2.audio.currentOutputBuffer["numberOfChannels"];
@@ -10180,7 +10214,7 @@ var ASM_CONSTS = {
       }
     }
   },
-  392951: $0 => {
+  1383067: $0 => {
     var SDL2 = Module["SDL2"];
     if ($0) {
       if (SDL2.capture.silenceTimer !== undefined) {
@@ -10214,7 +10248,7 @@ var ASM_CONSTS = {
       SDL2.audioContext = undefined;
     }
   },
-  393957: ($0, $1, $2) => {
+  1384073: ($0, $1, $2) => {
     var w = $0;
     var h = $1;
     var pixels = $2;
@@ -10285,7 +10319,7 @@ var ASM_CONSTS = {
     }
     SDL2.ctx.putImageData(SDL2.image, 0, 0);
   },
-  395423: ($0, $1, $2, $3, $4) => {
+  1385539: ($0, $1, $2, $3, $4) => {
     var w = $0;
     var h = $1;
     var hot_x = $2;
@@ -10322,24 +10356,24 @@ var ASM_CONSTS = {
     stringToUTF8(url, urlBuf, url.length + 1);
     return urlBuf;
   },
-  396411: $0 => {
+  1386527: $0 => {
     if (Module["canvas"]) {
       Module["canvas"].style["cursor"] = UTF8ToString($0);
     }
   },
-  396494: () => {
+  1386610: () => {
     if (Module["canvas"]) {
       Module["canvas"].style["cursor"] = "none";
     }
   },
-  396563: () => window.innerWidth,
-  396593: () => window.innerHeight
+  1386679: () => window.innerWidth,
+  1386709: () => window.innerHeight
 };
 
 // Imports from the Wasm binary.
-var _main = Module["_main"] = makeInvalidEarlyAccess("_main");
-
 var _malloc = makeInvalidEarlyAccess("_malloc");
+
+var _main = Module["_main"] = makeInvalidEarlyAccess("_main");
 
 var _strerror = makeInvalidEarlyAccess("_strerror");
 
@@ -10380,8 +10414,8 @@ var wasmMemory = makeInvalidEarlyAccess("wasmMemory");
 var wasmTable = makeInvalidEarlyAccess("wasmTable");
 
 function assignWasmExports(wasmExports) {
-  assert(typeof wasmExports["main"] != "undefined", "missing Wasm export: main");
   assert(typeof wasmExports["malloc"] != "undefined", "missing Wasm export: malloc");
+  assert(typeof wasmExports["main"] != "undefined", "missing Wasm export: main");
   assert(typeof wasmExports["strerror"] != "undefined", "missing Wasm export: strerror");
   assert(typeof wasmExports["fflush"] != "undefined", "missing Wasm export: fflush");
   assert(typeof wasmExports["fileno"] != "undefined", "missing Wasm export: fileno");
@@ -10399,8 +10433,8 @@ function assignWasmExports(wasmExports) {
   assert(typeof wasmExports["__set_stack_limits"] != "undefined", "missing Wasm export: __set_stack_limits");
   assert(typeof wasmExports["memory"] != "undefined", "missing Wasm export: memory");
   assert(typeof wasmExports["__indirect_function_table"] != "undefined", "missing Wasm export: __indirect_function_table");
-  _main = Module["_main"] = createExportWrapper("main", 2);
   _malloc = createExportWrapper("malloc", 1);
+  _main = Module["_main"] = createExportWrapper("main", 2);
   _strerror = createExportWrapper("strerror", 1);
   _fflush = createExportWrapper("fflush", 1);
   _fileno = createExportWrapper("fileno", 1);
@@ -10421,6 +10455,7 @@ function assignWasmExports(wasmExports) {
 }
 
 var wasmImports = {
+  /** @export */ __assert_fail: ___assert_fail,
   /** @export */ __handle_stack_overflow: ___handle_stack_overflow,
   /** @export */ __syscall_fcntl64: ___syscall_fcntl64,
   /** @export */ __syscall_fstat64: ___syscall_fstat64,

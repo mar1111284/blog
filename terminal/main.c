@@ -11,6 +11,9 @@
 #include "data_codec.h"
 #include "settings.h"
 
+#define STB_IMAGE_IMPLEMENTATION
+#include "stb_image.h"
+
 #define WIDTH 800
 #define HEIGHT 480
 
@@ -22,8 +25,18 @@ int flag_js_root_activate = 0;
 int awaiting_sudo_password = 0; // tracks if sudo is waiting for password
 static int translation_pending = 0;
 static int weather_forecast_pending = 0;
+static int image_processing_pending = 0;
 int cursor_pos = 0; // cursor position within input
 int terminal_fullscreen = 0;
+static int line_heights[MAX_LINES] = {0};
+
+
+// Global variable for the small font
+TTF_Font *font_8 = NULL;
+
+
+static SDL_Texture *pixel_art_texture = NULL;
+static SDL_Rect pixel_art_dst = {0};  // position & size
 
 
 #define ROOT_PASSWORD "rekav"
@@ -33,7 +46,7 @@ int input_len = 0;
 
 char terminal[MAX_LINES][MAX_LINE_LENGTH];
 int line_count = 0;
-int scroll_offset = 0;
+int scroll_offset_px = 0; // scroll in pixels
 int running = 1;
 
 typedef struct {
@@ -98,7 +111,67 @@ static ManEntry man_db[] = {
         "--------------------------------------------------\n"
         "        Type 'translate <src> <tgt> <text>'         \n"
         "--------------------------------------------------\n"
+		"\n"
     },
+	{
+		"weather",
+		"--------------------------------------------------\n"
+		"                     WEATHER                       \n"
+		"--------------------------------------------------\n\n"
+		"weather <city>\n"
+		"  Fetches the weather forecast for the specified city and displays it in the terminal.\n\n"
+		"Usage:\n"
+		"  weather Paris\n"
+		"  weather Sydney\n\n"
+		"Available Cities:\n"
+		"  Paris, London, New_York, Tokyo, Sydney, Moscow, Berlin, Toronto, Rio, Cape_Town\n\n"
+		"Examples:\n"
+		"  weather Paris\n"
+		"  weather Tokyo\n\n"
+		"Notes:\n"
+		"  - The command queries the Open-Meteo API asynchronously.\n"
+		"  - The result includes a global info block (latitude, longitude, elevation, timezone)\n"
+		"    and hourly forecast.\n"
+		"  - Forecast data includes:\n"
+		"      * UV index (hourly)\n"
+		"      * Precipitation (hourly, mm)\n"
+		"      * Temperature (hourly, if enabled)\n"
+		"  - Results are automatically printed in the terminal once received.\n"
+		"  - Only predefined common cities are supported; type 'weather' without arguments\n"
+		"    to see the list.\n"
+		"  - Graphs for UV and Temperature are displayed in ASCII format for easy reading.\n\n"
+		"--------------------------------------------------\n"
+		"              Type 'weather <city>'               \n"
+		"--------------------------------------------------\n"
+		"\n"
+	},
+	{
+		"to_ascii",
+		"--------------------------------------------------\n"
+		"                   TO_ASCII                       \n"
+		"--------------------------------------------------\n\n"
+		"to_ascii <link>\n"
+		"  Converts an online image into ASCII art and displays it in the terminal.\n\n"
+		"Usage:\n"
+		"  to_ascii <image_url>\n\n"
+		"Examples:\n"
+		"  to_ascii https://i.imgur.com/example.jpg\n"
+		"  to_ascii https://picsum.photos/800/600\n\n"
+		"Notes:\n"
+		"  - Sorry: copy/paste of images is not supported yet.\n"
+		"  - Images must be accessible via direct URL.\n"
+		"  - Some websites block image access due to CORS restrictions.\n"
+		"  - Working sources usually include Imgur, Picsum, Wikimedia.\n\n"
+		"Image Tips:\n"
+		"  - Use small to medium images (not too large).\n"
+		"  - High-contrast photos give the best results.\n"
+		"  - Avoid flat colors or very dark images.\n\n"
+		"--------------------------------------------------\n"
+		"          Type 'to_ascii <image_url>'              \n"
+		"--------------------------------------------------\n"
+		"\n"
+	},
+
 };
 
 
@@ -124,7 +197,11 @@ void cmd_translate(const char *args);
 void cmd_man(const char *args);
 void cmd_weather(const char *args);
 int poll_translate_result();
+void cmd_to_ascii(const char *args);
+int poll_image_result(void);
 int poll_forecast_result(void);
+void process_image_to_pixels(unsigned char *raw_data, int raw_size);
+void add_line_with_font(const char *text, TTF_Font *font_override, int line_height_override);
 
 
 Command commands[] = {
@@ -140,11 +217,227 @@ Command commands[] = {
     {"fullscreen", "Toggle fullscreen mode", cmd_fullscreen},
     {"translate",  "Translate text",          cmd_translate},
     {"weather",  "Weather Info.",          cmd_weather},
-    {"man",  "Display documentation",          cmd_man}, 
+    {"man",  "Display documentation",          cmd_man},
+    {"to_ascii", "Convert image from URL to ASCII art", cmd_to_ascii},
 
 };
 
 int command_count = sizeof(commands) / sizeof(commands[0]);
+
+static TTF_Font* line_fonts[MAX_LINES] = {0};
+
+int get_total_content_height(void) {
+    int h = 0;
+    for (int i = 0; i < line_count; i++) {
+        h += line_heights[i];
+    }
+    return h;
+}
+
+
+void add_line_with_font(const char *text, TTF_Font *font_override, int line_height_override) {
+    if (line_count >= MAX_LINES) {
+        memmove(terminal, terminal + 1, sizeof(terminal) - sizeof(terminal[0]));
+        memmove(line_fonts, line_fonts + 1, sizeof(line_fonts) - sizeof(line_fonts[0]));
+        memmove(line_heights, line_heights + 1, sizeof(line_heights) - sizeof(line_heights[0]));
+        line_count--;
+    }
+
+    // Copy text
+    strncpy(terminal[line_count], text, MAX_LINE_LENGTH - 1);
+    terminal[line_count][MAX_LINE_LENGTH - 1] = '\0';
+
+    // Store font
+    line_fonts[line_count] = font_override;
+
+    // Store line height (0 = use default)
+    line_heights[line_count] = (line_height_override > 0) ? line_height_override : settings.line_height;
+
+    line_count++;
+    
+    // -------- Auto-scroll if already at bottom --------
+	int input_height = 40;
+	int visible_height = HEIGHT - input_height;
+
+	// Where is the bottom right now?
+	int total_height_before = get_total_content_height() - line_heights[line_count - 1];
+	int bottom_offset_before = total_height_before - visible_height;
+	if (bottom_offset_before < 0) bottom_offset_before = 0;
+
+	// If user WAS at bottom → keep them at bottom
+	if (scroll_offset_px >= bottom_offset_before - 1) {
+		int total_height_now = get_total_content_height();
+		scroll_offset_px = total_height_now - visible_height;
+		if (scroll_offset_px < 0) scroll_offset_px = 0;
+	}
+
+}
+
+void process_image_to_pixels(unsigned char *raw_data, int raw_size) {
+    add_line("Starting ultra-detailed ASCII art...");
+
+    // Sanity & decode
+    if (raw_size <= 0 || raw_size > 20 * 1024 * 1024) {
+        add_line("Error: Invalid image size");
+        return;
+    }
+
+    int width, height, channels;
+    unsigned char *pixels = stbi_load_from_memory(raw_data, raw_size, &width, &height, &channels, 4);
+    if (!pixels) {
+        char msg[256];
+        snprintf(msg, sizeof(msg), "Decode failed: %s", stbi_failure_reason() ? stbi_failure_reason() : "unknown");
+        add_line(msg);
+        return;
+    }
+
+    char info[128];
+    snprintf(info, sizeof(info), "Image decoded: %d × %d (%d ch)", width, height, channels);
+    add_line(info);
+
+    // Settings - tune these!
+    int target_width = 130;  // chars wide (120–200 best)
+    const float char_aspect = 2.2f;  // lower = less horizontal compression (try 1.8–2.1)
+    int target_height = (int)((float)(height * target_width) / (float)width / char_aspect);
+	
+	/*
+    if (target_height > 100) {
+        target_height = 100;
+        target_width = (int)((float)(width * target_height) * char_aspect / (float)height);
+        char cap_msg[128];
+        snprintf(cap_msg, sizeof(cap_msg), "Height capped at 100 lines (width adjusted to %d)", target_width);
+        add_line(cap_msg);
+    }
+    */
+
+    // Debug size
+    char size_dbg[128];
+    snprintf(size_dbg, sizeof(size_dbg), "Target size: %d wide × %d high (aspect %.1f)", target_width, target_height, char_aspect);
+    add_line(size_dbg);
+
+    // High-quality ramp
+    const char *ramp = " .'`^\",:;Il!i~+_-?][}{1)(|\\/*tfjrxnuvczXYUJCLQ0OZmwqpdbkhao*#MW&8%B@$";
+    int ramp_len = strlen(ramp);
+
+    // Allocate output
+    size_t buf_size = (target_width + 1LL) * target_height + 1;
+    char *ascii = (char *)malloc(buf_size);
+    if (!ascii) {
+        add_line("Error: Cannot allocate ASCII buffer");
+        stbi_image_free(pixels);
+        return;
+    }
+    char *p = ascii;
+
+    // Dithering - your improved version
+    float *error = (float *)calloc(target_width + 4, sizeof(float));
+    float *next_row = (float *)calloc(target_width + 4, sizeof(float));
+
+    for (int y = 0; y < target_height; y++) {
+        for (int x = 0; x < target_width; x++) {
+            int sx = (x * width) / target_width;
+            int sy = (y * height) / target_height;
+
+            unsigned char *px = pixels + (sy * width + sx) * 4;
+            float r = px[0], g = px[1], b = px[2];
+
+            float gray = 0.299f * r + 0.587f * g + 0.114f * b + error[x + 1];
+
+            if (gray < 0) gray = 0;
+            if (gray > 255) gray = 255;
+
+            int idx = (int)(gray * ramp_len / 256.0f);
+            if (idx >= ramp_len) idx = ramp_len - 1;
+            if (idx < 0) idx = 0;
+
+            *p++ = ramp[idx];
+
+            float quant_error = gray - (idx * 255.0f / (ramp_len - 1));
+
+            error[x + 1] += quant_error * 7.0f / 16.0f;      // right
+            next_row[x] += quant_error * 3.0f / 16.0f;       // below-left
+            next_row[x + 1] += quant_error * 5.0f / 16.0f;   // below
+            next_row[x + 2] += quant_error * 1.0f / 16.0f;   // below-right
+        }
+
+        *p++ = '\n';
+
+        // Swap error rows
+        memcpy(error, next_row, (target_width + 4) * sizeof(float));
+        memset(next_row, 0, (target_width + 4) * sizeof(float));
+    }
+
+    free(error);
+    free(next_row);
+    *p = '\0';
+
+    // Print with small font
+    extern TTF_Font *font_8;
+    add_line("Using font size 8");
+
+    p = ascii;
+    char line_buf[1024];
+    int printed = 0;
+
+    while (*p) {
+        char *nl = strchr(p, '\n');
+        if (nl) {
+            size_t len = nl - p;
+            if (len >= sizeof(line_buf)) len = sizeof(line_buf) - 1;
+            strncpy(line_buf, p, len);
+            line_buf[len] = '\0';
+
+            add_line_with_font(line_buf, font_8,9);
+            printed++;
+
+            p = nl + 1;
+        } else {
+            add_line_with_font(p, font_8,9);
+            printed++;
+            break;
+        }
+    }
+
+    char debug[128];
+    snprintf(debug, sizeof(debug), "Printed %d lines (expected ~%d)", printed, target_height);
+    add_line(debug);
+
+    free(ascii);
+    stbi_image_free(pixels);
+
+    add_line("Ultra-detailed ASCII complete!");
+}
+
+// Command: to_ascii <image_url>
+void cmd_to_ascii(const char *args) {
+    image_processing_pending = 1;  // flag for polling
+
+    if (!args || strlen(args) == 0) {
+        add_line("Usage: to_ascii <image_url>");
+        add_line("Example: to_ascii https://i.imgur.com/example.jpg");
+        image_processing_pending = 0;
+        return;
+    }
+
+    // Very simple validation - just make sure it looks like a URL
+    if (strncmp(args, "http://", 7) != 0 && strncmp(args, "https://", 8) != 0) {
+        add_line("Error: Please provide a valid http/https URL");
+        image_processing_pending = 0;
+        return;
+    }
+
+#ifdef __EMSCRIPTEN__
+    // Store the request in sessionStorage - JS will pick it up
+    EM_ASM({
+        const url = UTF8ToString($0);
+        sessionStorage.setItem("rekav_image_request", url);
+        console.log("C -> JS image request queued:", url);
+    }, args);
+#endif
+
+    add_line("Fetching and processing image...");
+    add_line("(This may take a few seconds depending on image size)");
+}
 
 void cmd_weather(const char *args) {
     weather_forecast_pending = 1;
@@ -157,10 +450,10 @@ void cmd_weather(const char *args) {
         return;
     }
 
-    // Find city in array
+    // Find city in array (case-insensitive)
     City *selected = NULL;
     for (int i = 0; i < city_count; i++) {
-        if (strcmp(args, cities[i].name) == 0) {
+        if (strcasecmp(args, cities[i].name) == 0) { // <-- case-insensitive
             selected = &cities[i];
             break;
         }
@@ -344,6 +637,91 @@ void cmd_translate(const char *args) {
     add_line("Translating…");
 }
 
+#ifdef __EMSCRIPTEN__
+int poll_image_result(void) {
+    if (!image_processing_pending) return 0;
+
+    char status_buf[256];
+    status_buf[0] = '\0';
+
+    // Do NOT allocate 20MB on stack! Use heap instead
+    static char* base64_buf = NULL;
+    static size_t base64_buf_max = 20 * 1024 * 1024 + 1;
+
+    if (!base64_buf) {
+        base64_buf = (char*)malloc(base64_buf_max);
+        if (!base64_buf) {
+            add_line("Error: Cannot allocate base64 buffer");
+            image_processing_pending = 0;
+            return 1;
+        }
+    }
+    base64_buf[0] = '\0';
+
+    // Fetch base64 string from sessionStorage
+    EM_ASM({
+        const out_ptr = $0;
+        const maxlen = $1;
+        const res = sessionStorage.getItem("rekav_image_array");
+        if (!res) return;
+        const len = lengthBytesUTF8(res) + 1;
+        if (len > maxlen) {
+            stringToUTF8("TOO_LARGE", out_ptr, maxlen);
+            return;
+        }
+        stringToUTF8(res, out_ptr, maxlen);
+        sessionStorage.removeItem("rekav_image_array");
+    }, base64_buf, base64_buf_max);
+
+    if (base64_buf[0] == '\0') return 0;
+
+    // Error case
+    if (strncmp(base64_buf, "__ERROR__:", 10) == 0) {
+        image_processing_pending = 0;
+        add_line("Image fetch error:");
+        add_line(base64_buf + 10);
+        return 1;
+    }
+
+    if (strcmp(base64_buf, "TOO_LARGE") == 0) {
+        image_processing_pending = 0;
+        add_line("Error: Image too large (base64 exceeds buffer)");
+        return 1;
+    }
+
+    // Decode using your function
+    static unsigned char* image_raw = NULL;
+    static size_t image_raw_max = 15 * 1024 * 1024;
+
+    if (!image_raw) {
+        image_raw = (unsigned char*)malloc(image_raw_max);
+        if (!image_raw) {
+            add_line("Error: Cannot allocate image buffer");
+            image_processing_pending = 0;
+            return 1;
+        }
+    }
+
+    int decoded_bytes = base64_decode(base64_buf, image_raw, image_raw_max);
+
+    if (decoded_bytes < 0) {
+        image_processing_pending = 0;
+        add_line("Error: Invalid base64 data");
+        return 1;
+    }
+
+    image_processing_pending = 0;
+
+    char msg[128];
+    snprintf(msg, sizeof(msg), "Image received and decoded (%d bytes)", decoded_bytes);
+    add_line(msg);
+
+    // Now process
+    process_image_to_pixels(image_raw, decoded_bytes);
+
+    return 1;
+}
+#endif
 
 
 #ifdef __EMSCRIPTEN__
@@ -454,20 +832,6 @@ void cmd_fullscreen(const char *args) {
     });
     add_line("Toggled fullscreen mode.");
 
-    // --- Set font size for fullscreen ---
-    int new_size = 14;
-
-    if (settings.font) {
-        TTF_CloseFont(settings.font); // free old font
-    }
-
-    settings.font = TTF_OpenFont("font.ttf", new_size);
-    if (!settings.font) {
-        add_line("Failed to set font for fullscreen.");
-    } else {
-        add_line("Font size set to 14 for fullscreen.");
-        settings.font_size = new_size; // update settings
-    }
 
 #else
     add_line("Fullscreen not supported in native mode.");
@@ -493,6 +857,7 @@ void cmd_help(const char *args) {
     add_line("  exit                         - Exit root access");
     add_line("  translate <src> <tgt> <text> - Translate text via MyMemory API");
     add_line("  man <command>                - Show command documentation");
+    add_line("  to_ascii <link>              - Convert image to ASCII");
     
     add_line("");
     add_line("--------------------------------------------------");
@@ -631,6 +996,10 @@ TTF_Font *font;
 /* ---------- Terminal helpers ---------- */
 
 void add_line(const char *text) {
+
+	add_line_with_font(text, NULL,0);
+	
+	/*
     if (line_count >= MAX_LINES) {
         memmove(terminal, terminal + 1, sizeof(terminal) - sizeof(terminal[0]));
         line_count--;
@@ -646,12 +1015,14 @@ void add_line(const char *text) {
         scroll_offset = line_count - max_visible_lines;
         if (scroll_offset < 0) scroll_offset = 0;
     }
+    */
 }
 
 void clear_terminal() {
     line_count = 0;
-    scroll_offset = 0;
+    scroll_offset_px = 0;  // reset pixel-based scroll
 }
+
 
 void execute_command(const char *cmd) {
     if (!cmd || strlen(cmd) == 0)
@@ -728,12 +1099,12 @@ void submit_input() {
 
 /* ---------- Rendering ---------- */
 
-void draw_text(int x, int y, const char *text) {
-    if (!settings.font) return;  // Safety check
-
+void draw_text(int x, int y, const char *text, TTF_Font *override_font) {
+    TTF_Font *f = override_font ? override_font : settings.font;
     SDL_Color color = settings.font_color;
-    SDL_Surface *surface = TTF_RenderUTF8_Blended(settings.font, text, color);
-    if (!surface) return; // Fail gracefully
+
+    SDL_Surface *surface = TTF_RenderUTF8_Blended(f, text, color);
+    if (!surface) return;
 
     SDL_Texture *texture = SDL_CreateTextureFromSurface(renderer, surface);
     if (!texture) {
@@ -764,26 +1135,21 @@ void render() {
 		SDL_RenderClear(renderer);
 	}
 
-    int y = 10;
-    int input_height = 40;
-	int line_height = settings.line_height;
-    int max_visible_lines = (HEIGHT - input_height) / line_height;
+	int y = 10 - scroll_offset_px; // start drawing relative to pixel scroll
+	int input_height = 40;
 
-    // Clamp scroll_offset
-    if (scroll_offset < 0) scroll_offset = 0;
-    if (scroll_offset > line_count - max_visible_lines)
-        scroll_offset = line_count - max_visible_lines;
-    if (scroll_offset < 0) scroll_offset = 0;
-
-    int start_line = scroll_offset;
-    int end_line = start_line + max_visible_lines;
-    if (end_line > line_count) end_line = line_count;
-
-    // Draw terminal lines
-    for (int i = start_line; i < end_line; i++) {
-        draw_text(10, y, terminal[i]);
-        y += line_height;
-    }
+	// Draw terminal lines until we reach the bottom
+	for (int i = 0; i < line_count; i++) {
+		if (y + line_heights[i] < 10) { 
+		    // line is above the visible area
+		    y += line_heights[i];
+		    continue;
+		}
+		if (y > HEIGHT - input_height) break; 
+		    // line is below the visible area
+		draw_text(10, y, terminal[i], line_fonts[i]);
+		y += line_heights[i];
+	}
 
     // ---------- Draw input prompt ----------
     char display[MAX_LINE_LENGTH + 2]; // +1 for cursor, +1 for '\0'
@@ -810,18 +1176,39 @@ void render() {
     display[cursor_pos] = '_';
 
     char prompt_line[MAX_LINE_LENGTH + 32];
-    snprintf(prompt_line, sizeof(prompt_line), "> %s", display);
+    if (awaiting_sudo_password){
+        snprintf(prompt_line, sizeof(prompt_line), "> password: %s", display);
+    }else{
+        snprintf(prompt_line, sizeof(prompt_line), "> %s", display);
+    }
 
-    draw_text(10, HEIGHT - input_height + 10, prompt_line);
+
+    draw_text(10, HEIGHT - input_height + 10, prompt_line, settings.font);
 
     SDL_RenderPresent(renderer);
 }
 
 
+static int last_fullscreen_state = -1;
+
 /* ---------- Main loop ---------- */
 void main_loop() {
 
+
     SDL_Event e;
+    
+	#ifdef __EMSCRIPTEN__
+	EM_ASM({
+		try {
+		    let canvas = Module['canvas'];
+		    Module.isFullscreen = (document.fullscreenElement === canvas);
+		} catch(e) {
+		    console.error(e);
+		}
+	});
+	#endif
+
+
     while (SDL_PollEvent(&e)) {
         if (e.type == SDL_QUIT)
             running = 0;
@@ -855,12 +1242,41 @@ void main_loop() {
                 submit_input();  // <-- submit_input() now handles sudo/password logic
             }
             // Scroll terminal lines
-            else if (e.key.keysym.sym == SDLK_UP) {
-                scroll_offset--;
-            }
-            else if (e.key.keysym.sym == SDLK_DOWN) {
-                scroll_offset++;
-            }
+			else if (e.key.keysym.sym == SDLK_UP) {
+				// scroll up by one line's pixel height
+				int prev_line_height = 0;
+				if (line_count > 0) {
+					int line_index = 0;
+					int acc = 0;
+					while (acc < scroll_offset_px && line_index < line_count) {
+						acc += line_heights[line_index];
+						prev_line_height = line_heights[line_index];
+						line_index++;
+					}
+				}
+				scroll_offset_px -= prev_line_height;
+				if (scroll_offset_px < 0) scroll_offset_px = 0;
+			}
+			else if (e.key.keysym.sym == SDLK_DOWN) {
+				// scroll down by one line's pixel height
+				int next_line_height = 0;
+				int acc = 0;
+				int i;
+				for (i = 0; i < line_count; i++) {
+					acc += line_heights[i];
+					if (acc > scroll_offset_px) {
+						next_line_height = line_heights[i];
+						break;
+					}
+				}
+				scroll_offset_px += next_line_height;
+				// clamp to max scroll
+				int total_height = 0;
+				for (i = 0; i < line_count; i++) total_height += line_heights[i];
+				int max_scroll = total_height - (HEIGHT - 40); // 40 = input_height
+				if (scroll_offset_px > max_scroll) scroll_offset_px = max_scroll;
+			}
+
             else if (e.key.keysym.sym == SDLK_LEFT && cursor_pos > 0) {
 				cursor_pos--;
 			}
@@ -870,19 +1286,53 @@ void main_loop() {
 
         }
 
-        // Mouse wheel scroll
-        if (e.type == SDL_MOUSEWHEEL) {
-            int max_visible_lines = (HEIGHT - 40) / 28;
-            scroll_offset -= e.wheel.y * 3; // scroll 3 lines per tick
-            if (scroll_offset < 0) scroll_offset = 0;
-            if (scroll_offset > line_count - max_visible_lines)
-                scroll_offset = line_count - max_visible_lines;
-        }
+		if (e.type == SDL_MOUSEWHEEL) {
+			int scroll_pixels = 0;
+			int acc = 0;
+			int i;
+			// Convert 3 lines per tick to pixel height
+			int lines_to_scroll = 3 * e.wheel.y; // positive = up, negative = down
+			if (lines_to_scroll > 0) { // scroll up
+				for (i = 0; i < line_count && i < lines_to_scroll; i++)
+				    scroll_pixels += line_heights[i];
+				scroll_offset_px -= scroll_pixels;
+				if (scroll_offset_px < 0) scroll_offset_px = 0;
+			} else if (lines_to_scroll < 0) { // scroll down
+				lines_to_scroll = -lines_to_scroll;
+				for (i = 0; i < line_count && i < lines_to_scroll; i++)
+				    scroll_pixels += line_heights[i];
+				scroll_offset_px += scroll_pixels;
+				// clamp to max scroll
+				int total_height = 0;
+				for (i = 0; i < line_count; i++) total_height += line_heights[i];
+				int max_scroll = total_height - (HEIGHT - 40);
+				if (scroll_offset_px > max_scroll) scroll_offset_px = max_scroll;
+			}
+		}
+
     }
     
 
 	poll_translate_result(); // prints automatically if translation arrived
 	poll_forecast_result();
+	poll_image_result();
+	
+	#ifdef __EMSCRIPTEN__
+		int is_fullscreen = EM_ASM_INT({
+		    return Module.isFullscreen ? 1 : 0;
+		});
+
+		if (is_fullscreen != last_fullscreen_state) {
+		    last_fullscreen_state = is_fullscreen;
+
+		    if (is_fullscreen) {
+		        set_font_size(11);
+		    } else {
+		        set_font_size(15);
+		    }
+		}
+	#endif
+
 
 
     render();
@@ -913,6 +1363,13 @@ int main() {
         printf("Failed to load font\n");
         return 1;
     }
+    
+	font_8 = TTF_OpenFont("font.ttf", 8);
+	if (!font_8) {
+		printf("Failed to load small font size 8: %s\n", TTF_GetError());
+		// Optional: fallback to main font or error handling
+		// font_8 = font;  // use main font as fallback
+	}
     TTF_SetFontStyle(font, TTF_STYLE_BOLD); // Bold font
 
     SDL_StartTextInput();
@@ -921,6 +1378,3 @@ int main() {
     emscripten_set_main_loop(main_loop, 0, 1);
     return 0;
 }
-
-
-

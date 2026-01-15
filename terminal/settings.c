@@ -126,7 +126,7 @@ static const Theme predefined_themes[] = {
 SDL_Texture *settings_background_texture = NULL;
 
 int set_line_height(int height) {
-    if (height < 15 || height > 25) {
+    if (height < 8 || height > 25) {
         return 0; // invalid
     }
 
@@ -160,7 +160,7 @@ void init_settings() {
     settings.background = (SDL_Color){18, 18, 18, 255}; // Charcoal
     settings.font_color = (SDL_Color){255, 255, 255, 255}; // White
     settings.font_size = 16;
-    settings.line_height = 19;
+    settings.line_height = 15;
     settings.theme_name = "Default";
     settings.font = TTF_OpenFont("font.ttf", settings.font_size);
     if (!settings.font) {
@@ -255,7 +255,7 @@ int set_font_color(const char *name) {
 }
 
 int set_font_size(int size) {
-    if (size < 10 || size > 20) {
+    if (size < 7 || size > 20) {
         return 0; // invalid size
     }
 
