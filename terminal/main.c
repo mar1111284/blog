@@ -20,8 +20,14 @@
 #define HEIGHT 480
 
 #define MAX_LINES 512
-#define MAX_LINE_LENGTH 256
 #define MAX_PNG_SIZE (50 * 1024 * 1024) // 50MB for high-res export
+
+#define MAX_HISTORY 64
+#define MAX_LINE_LENGTH 512
+
+char *history[MAX_HISTORY];      // FIFO buffer for commands
+int history_count = 0;           // number of commands currently stored
+int history_pos = -1;            // -1 = not browsing history
 
 typedef struct {
     const char *name;
@@ -95,114 +101,6 @@ typedef struct {
     command_func func;
 } Command;
 
-typedef struct {
-    const char *cmd;
-    const char *description;
-} ManEntry;
-
-static ManEntry man_db[] = {
-    {
-        "translate",
-        "--------------------------------------------------\n"
-        "                   TRANSLATE                      \n"
-        "--------------------------------------------------\n\n"
-        "translate <source> <target> <text>\n"
-        "  Sends <text> to the translator and prints the result in the terminal.\n\n"
-        "Usage:\n"
-        "  translate en fr Hello world\n"
-        "  translate es en 'Hola mundo'\n\n"
-        "Examples:\n"
-        "  translate en fr Hello world\n"
-        "  translate es en Goodbye!\n"
-        "  translate ja en 'How are you?'\n\n"
-        "Notes:\n"
-        "  - Translations are handled asynchronously.\n"
-        "  - Result is automatically printed in the terminal.\n"
-        "  - You must specify both <source> and <target> languages.\n"
-        "  - MyMemory API is used; short phrases may return unexpected results.\n"
-        "  - Machine translation fallback is forced (mt=1) for reliability.\n"
-        "  - Supported languages include:\n"
-        "      en (English), fr (French), es (Spanish), de (German), it (Italian),\n"
-        "      pt (Portuguese), nl (Dutch), ru (Russian), ja (Japanese), zh (Chinese)\n"
-        "  - Use quotes for multi-word text.\n\n"
-        "--------------------------------------------------\n"
-        "        Type 'translate <src> <tgt> <text>'         \n"
-        "--------------------------------------------------\n"
-		"\n"
-    },
-	{
-		"weather",
-		"--------------------------------------------------\n"
-		"                     WEATHER                       \n"
-		"--------------------------------------------------\n\n"
-		"weather <city>\n"
-		"  Fetches the weather forecast for the specified city and displays it in the terminal.\n\n"
-		"Usage:\n"
-		"  weather Paris\n"
-		"  weather Sydney\n\n"
-		"Available Cities:\n"
-		"  Paris, London, New_York, Tokyo, Sydney, Moscow, Berlin, Toronto, Rio, Cape_Town\n\n"
-		"Examples:\n"
-		"  weather Paris\n"
-		"  weather Tokyo\n\n"
-		"Notes:\n"
-		"  - The command queries the Open-Meteo API asynchronously.\n"
-		"  - The result includes a global info block (latitude, longitude, elevation, timezone)\n"
-		"    and hourly forecast.\n"
-		"  - Forecast data includes:\n"
-		"      * UV index (hourly)\n"
-		"      * Precipitation (hourly, mm)\n"
-		"      * Temperature (hourly, if enabled)\n"
-		"  - Results are automatically printed in the terminal once received.\n"
-		"  - Only predefined common cities are supported; type 'weather' without arguments\n"
-		"    to see the list.\n"
-		"  - Graphs for UV and Temperature are displayed in ASCII format for easy reading.\n\n"
-		"--------------------------------------------------\n"
-		"              Type 'weather <city>'               \n"
-		"--------------------------------------------------\n"
-		"\n"
-	},
-	{
-		"to_ascii",
-		"--------------------------------------------------\n"
-		"                   TO_ASCII                       \n"
-		"--------------------------------------------------\n\n"
-		"to_ascii <link> [options]\n"
-		"  Converts an online image into ASCII art.\n"
-		"  By default, it displays the ASCII preview in the terminal.\n"
-		"  Optional flags allow exporting to a high-resolution PNG.\n\n"
-		"Usage:\n"
-		"  to_ascii <image_url> [options]\n\n"
-		"Options:\n"
-		"  download=1       Export the ASCII art as a high-resolution PNG.\n"
-		"  wide=<number>    Number of characters per line (ASCII width). Default: 130\n"
-		"  font_size=<num>  Font size for the exported PNG. Default: 6\n"
-		"  bg=<color>       Background color for PNG. Options: black, white, red, green, blue, pink, purple. Default: black\n"
-		"  color=<color>    Font color for PNG. Options same as bg. Default: white\n"
-		"  name=<filename>  Output PNG file name. Default: ascii_highres.png\n\n"
-		"Examples:\n"
-		"  to_ascii https://i.imgur.com/example.jpg\n"
-		"  to_ascii https://picsum.photos/800/600 download=1 wide=300 font_size=15 bg=pink color=purple name=output.png\n\n"
-		"Notes:\n"
-		"  - Copy/paste of images is not supported.\n"
-		"  - Images must be accessible via direct URL.\n"
-		"  - Some websites block image access due to CORS restrictions.\n"
-		"  - Working sources usually include Imgur, Picsum, Wikimedia.\n\n"
-		"Image Tips:\n"
-		"  - Use small to medium images for faster processing.\n"
-		"  - High-contrast photos give the best results.\n"
-		"  - Avoid flat colors or very dark images.\n"
-		"  - Increasing 'wide' and 'font_size' improves export resolution.\n\n"
-		"--------------------------------------------------\n"
-		"          Type 'to_ascii <image_url> [options]'   \n"
-		"--------------------------------------------------\n"
-		"\n"
-	},
-
-};
-
-
-static const int man_db_size = sizeof(man_db) / sizeof(man_db[0]);
 
 // cmd prototypes 
 void add_line(const char *text);
@@ -259,6 +157,15 @@ int get_total_content_height(void) {
     }
     return h;
 }
+
+#ifdef __EMSCRIPTEN__
+void save_history_to_storage() {
+    // Build a JS array as string
+    emscripten_run_script(
+        "sessionStorage.setItem('rekav_history', JSON.stringify(Module.history_array));"
+    );
+}
+#endif
 
 
 
@@ -1341,6 +1248,35 @@ void submit_input() {
     add_line(line);
 
     execute_command(input);
+    
+    // --- Push input to history ---
+	if (input_len > 0) {
+		// Copy command
+		char *cmd_copy = strdup(input);
+		
+		if (history_count == MAX_HISTORY) {
+		    // Buffer full, remove oldest
+		    free(history[0]);
+		    memmove(&history[0], &history[1], sizeof(char*) * (MAX_HISTORY - 1));
+		    history[MAX_HISTORY - 1] = cmd_copy;
+		} else {
+		    history[history_count++] = cmd_copy;
+		}
+
+		// Reset history browsing
+		history_pos = -1;
+
+	#ifdef __EMSCRIPTEN__
+		// Update sessionStorage
+		EM_ASM({
+		    if (!Module.history_array) Module.history_array = [];
+		    let cmd = UTF8ToString($0);
+		    Module.history_array.push(cmd);
+		    if (Module.history_array.length > 64) Module.history_array.shift();
+		    sessionStorage.setItem('rekav_history', JSON.stringify(Module.history_array));
+		}, cmd_copy);
+	#endif
+	}
 
     input_len = 0;
     input[0] = '\0';
@@ -1493,39 +1429,39 @@ void main_loop() {
             }
             // Scroll terminal lines
 			else if (e.key.keysym.sym == SDLK_UP) {
-				// scroll up by one line's pixel height
-				int prev_line_height = 0;
-				if (line_count > 0) {
-					int line_index = 0;
-					int acc = 0;
-					while (acc < scroll_offset_px && line_index < line_count) {
-						acc += line_heights[line_index];
-						prev_line_height = line_heights[line_index];
-						line_index++;
-					}
+				if (history_count > 0) {
+					if (history_pos == -1) 
+						history_pos = history_count - 1;
+					else if (history_pos > 0) 
+						history_pos--;
+
+					strncpy(input, history[history_pos], MAX_LINE_LENGTH);
+					input_len = strlen(input);       // length of current command
+					input[input_len] = '\0';
+					cursor_pos = input_len;          // move cursor to end
 				}
-				scroll_offset_px -= prev_line_height;
-				if (scroll_offset_px < 0) scroll_offset_px = 0;
 			}
 			else if (e.key.keysym.sym == SDLK_DOWN) {
-				// scroll down by one line's pixel height
-				int next_line_height = 0;
-				int acc = 0;
-				int i;
-				for (i = 0; i < line_count; i++) {
-					acc += line_heights[i];
-					if (acc > scroll_offset_px) {
-						next_line_height = line_heights[i];
-						break;
+				if (history_count > 0 && history_pos != -1) {
+					if (history_pos < history_count - 1) 
+						history_pos++;
+					else {
+						history_pos = -1;
+						input[0] = '\0';
+						input_len = 0;
+						cursor_pos = 0;             // reset cursor
+						return;
 					}
+
+					strncpy(input, history[history_pos], MAX_LINE_LENGTH);
+					input_len = strlen(input);      // length of current command
+					input[input_len] = '\0';
+					cursor_pos = input_len;         // move cursor to end
 				}
-				scroll_offset_px += next_line_height;
-				// clamp to max scroll
-				int total_height = 0;
-				for (i = 0; i < line_count; i++) total_height += line_heights[i];
-				int max_scroll = total_height - (HEIGHT - 40); // 40 = input_height
-				if (scroll_offset_px > max_scroll) scroll_offset_px = max_scroll;
 			}
+
+
+
 
             else if (e.key.keysym.sym == SDLK_LEFT && cursor_pos > 0) {
 				cursor_pos--;
