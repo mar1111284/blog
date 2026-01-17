@@ -8,6 +8,8 @@
 #include "settings.h"
 #include "base64.h"
 #include "ascii_converter.h"
+#include <emscripten/emscripten.h>
+
 
 #ifdef __EMSCRIPTEN__
 #include <emscripten.h>
@@ -103,7 +105,6 @@ void cmd_exit(const char *args) {
 
 
 void cmd_fullscreen(const char *args) {
-
 	#ifdef __EMSCRIPTEN__
 		EM_ASM({
 		    try {
@@ -117,37 +118,33 @@ void cmd_fullscreen(const char *args) {
 		        console.error('Fullscreen toggle error:', e);
 		    }
 		});
-		//add_line("Toggled fullscreen mode.");
-
+		add_terminal_line("Fulscreen mode activated", LINE_FLAG_SYSTEM);
 
 	#else
-		//add_line("Fullscreen not supported in native mode.");
+		add_terminal_line("Fullscreen not supported in native mode.", LINE_FLAG_ERROR);
 	#endif
 }
 
 void cmd_echo(const char *args) {
     if (args && strlen(args) > 0) return;
-        //add_line(args);
+        add_terminal_line(args, LINE_FLAG_NONE);
 }
 
 void cmd_open(const char *args) {
     if (!args || strlen(args) == 0) {
-        //add_line("Usage: open <page>");
+        add_terminal_line("Usage: open <page>", LINE_FLAG_SYSTEM);
         return;
     }
 
-    // Copy input to mutable buffer
     char page[128];
     strncpy(page, args, sizeof(page) - 1);
     page[sizeof(page) - 1] = '\0';
 
-    // Remove ".html" if user typed it
     size_t len = strlen(page);
-    if (len > 5 && strcmp(page + len - 5, ".html") == 0) {
-        page[len - 5] = '\0';
+    if (len > PAGE_EXT_LEN && strcmp(page + len - PAGE_EXT_LEN, PAGE_EXT) == 0) {
+        page[len - PAGE_EXT_LEN] = '\0';
     }
 
-    // Check if page is in allowed list
     int found = 0;
     for (int i = 0; i < page_count; i++) {
         if (strcmp(page, available_pages[i]) == 0) {
@@ -157,7 +154,7 @@ void cmd_open(const char *args) {
     }
 
     if (!found) {
-        //add_line("Page not found or unavailable.");
+        add_terminal_line("Page not found or unavailable.", LINE_FLAG_SYSTEM);
         return;
     }
 
@@ -174,191 +171,181 @@ void cmd_open(const char *args) {
 
     char buf[128];
     snprintf(buf, sizeof(buf), "Opening %s...", page);
-    //add_line(buf);
+    add_terminal_line(buf, LINE_FLAG_SYSTEM);
 }
 
 void cmd_cat(const char *args) {
     if (!args || strlen(args) == 0) {
-        //add_line("Usage: cat <file>");
+        add_terminal_line("Usage: cat <file>", LINE_FLAG_SYSTEM);
         return;
     }
 
     FILE *f = fopen(args, "r");
     if (!f) {
         char buf[256];
-        snprintf(buf, sizeof(buf), "cat: %s: No such fileeee", args);
-        //add_line(buf);
+        snprintf(buf, sizeof(buf), "cat: %s: No such file", args);
+        add_terminal_line(buf, LINE_FLAG_SYSTEM);
         return;
     }
 
-    char line[256];
+    char line[CAT_LINE_MAX];
     while (fgets(line, sizeof(line), f)) {
-        line[strcspn(line, "\n")] = 0; // remove newline
-        //add_line(line);
+        line[strcspn(line, "\n")] = 0;
+        add_terminal_line(line, LINE_FLAG_NONE);
     }
+
     fclose(f);
 }
 
-
 void cmd_ls(const char *args) {
-	return;
-	/*
-    add_line("gallery.html");
-    add_line("random.html");
-    add_line("shitpost.html");
-    add_line("about.html");
-    add_line("info.txt");
-    add_line("welcome.txt");
-    */
+    for (int i = 0; i < page_count; i++) {
+        char buf[128];
+        snprintf(buf, sizeof(buf), "%s.html", available_pages[i]);
+        add_terminal_line(buf, LINE_FLAG_NONE);
+    }
+
+    add_terminal_line("info.txt", LINE_FLAG_NONE);
+    add_terminal_line("welcome.txt", LINE_FLAG_NONE);
 }
+
 
 void cmd_sudo(const char *args) {
     if (_root_active) {
-        //add_line("You are already root.");
+        add_terminal_line("You are already root.", LINE_FLAG_SYSTEM);
     } else {
-        _awaiting_sudo_password = 1;
+        _awaiting_sudo_password = TRUE;
     }
 }
 
 void cmd_man(const char *args) {
     if (!args || strlen(args) == 0) {
-        //add_line("Usage: man <command>");
+        add_terminal_line("Usage: man <command>", LINE_FLAG_SYSTEM);
         return;
     }
 
-    // Search in man_db
     for (int i = 0; i < man_db_size; i++) {
         if (strcmp(args, man_db[i].cmd) == 0) {
-            // Print each line of description
             const char *desc = man_db[i].description;
             const char *line = desc;
             while (*line) {
                 const char *next = strchr(line, '\n');
                 if (!next) next = line + strlen(line);
-                char buf[512];
+                char buf[MAN_LINE_BUF];
                 int len = next - line;
                 if (len >= sizeof(buf)) len = sizeof(buf) - 1;
                 memcpy(buf, line, len);
                 buf[len] = '\0';
-                //add_line(buf);
+                add_terminal_line(buf, LINE_FLAG_NONE);
                 line = (*next) ? next + 1 : next;
             }
             return;
         }
     }
 
-    //add_line("No manual entry for this command.");
+    add_terminal_line("No manual entry for this command.", LINE_FLAG_SYSTEM);
 }
 
 void cmd_settings(const char *args) {
     char option[64];
     char value[64];
 
-	/*if (!args || strlen(args) == 0) {
-		add_line("");
-		add_line("--------------------------------------------------");
-		add_line("                   SETTINGS                       ");
-		add_line("--------------------------------------------------");
-		add_line("");
+    if (!args || strlen(args) == 0) {
+        add_terminal_line("", LINE_FLAG_NONE);
+        add_terminal_line("--------------------------------------------------", LINE_FLAG_NONE);
+        add_terminal_line("                   SETTINGS                       ", LINE_FLAG_NONE);
+        add_terminal_line("--------------------------------------------------", LINE_FLAG_NONE);
+        add_terminal_line("", LINE_FLAG_NONE);
 
-		add_line("Usage: settings <option> <value>");
-		add_line("");
-		add_line("Options:");
-		add_line("  bg           - Background color (charcoal, dos_blue, pink, green, red)");
-		add_line("  font_color   - Font color (white, green, pink, red, orange)");
-		add_line("  font_size    - Font size (10-20)");
-		add_line("  line_height  - Line height (15-25)");
-		add_line("  theme        - Predefined themes (Default, MS-DOS, Barbie, Jurassic, Inferno)");
-		
-		add_line("");
-		add_line("--------------------------------------------------");
-		add_line("       Example: settings bg charcoal            ");
-		add_line("--------------------------------------------------");
-		add_line("");
-		
-		return;
-	}
+        add_terminal_line("Usage: settings <option> <value>", LINE_FLAG_SYSTEM);
+        add_terminal_line("", LINE_FLAG_NONE);
+        add_terminal_line("Options:", LINE_FLAG_NONE);
+        add_terminal_line("  bg           - Background color (charcoal, dos_blue, pink, green, red)", LINE_FLAG_NONE);
+        add_terminal_line("  font_color   - Font color (white, green, pink, red, orange)", LINE_FLAG_NONE);
+        add_terminal_line("  font_size    - Font size (10-20)", LINE_FLAG_NONE);
+        add_terminal_line("  line_height  - Line height (15-25)", LINE_FLAG_NONE);
+        add_terminal_line("  theme        - Predefined themes (default, msdos, barbie, jurassic, inferno)", LINE_FLAG_NONE);
 
-    // Parse option and value from args
-    int matched = sscanf(args, "%63s %63s", option, value);
-    if (matched != 2) {
-        add_line("Invalid usage! Example: settings font_size 18");
+        add_terminal_line("", LINE_FLAG_NONE);
+        add_terminal_line("--------------------------------------------------", LINE_FLAG_NONE);
+        add_terminal_line("       Example: settings bg charcoal            ", LINE_FLAG_NONE);
+        add_terminal_line("--------------------------------------------------", LINE_FLAG_NONE);
+        add_terminal_line("", LINE_FLAG_NONE);
+
         return;
     }
 
-	if (strcmp(option, "bg") == 0) {
-		if (set_background_color(value)) {
-		    add_line("Background color applied.");
-		} else {
-		    add_line("Unknown background color.");
-		}
-	} 
-	else if (strcmp(option, "font_color") == 0) {
-		if (set_font_color(value)) {
-		    add_line("Font color applied.");
-		} else {
-		    add_line("Unknown font color.");
-		}
-	} 
-	else if (strcmp(option, "font_size") == 0) {
-		int size = atoi(value);
-		if (set_font_size(size)) {
-		    add_line("Font size applied.");
-		} else {
-		    add_line("Font size must be between 10 and 20.");
-		}
-	} 
-	else if (strcmp(option, "line_height") == 0) {
-		int height = atoi(value);
-		if (set_line_height(height)) {
-		    add_line("Line height applied.");
-		} else {
-		    add_line("Line height must be between 15 and 25.");
-		}
-	} 
-	else if (strcmp(option, "theme") == 0) {
-		if (apply_theme(value)) {
-		    add_line("Theme applied.");
-		} else {
-		    add_line("Unknown theme.");
-		}
-	} 
-	else {
-		add_line("Unknown setting option.");
-	}
-	*/
+    int matched = sscanf(args, "%63s %63s", option, value);
+    if (matched != 2) {
+        add_terminal_line("Invalid usage! Example: settings font_size 18", LINE_FLAG_SYSTEM);
+        return;
+    }
 
-
+    if (strcmp(option, "bg") == 0) {
+        if (set_background_color(&_terminal.settings, value)) {
+            add_terminal_line("Background color applied.", LINE_FLAG_SYSTEM);
+        } else {
+            add_terminal_line("Unknown background color.", LINE_FLAG_SYSTEM);
+        }
+    } 
+    else if (strcmp(option, "font_color") == 0) {
+        if (set_font_color(&_terminal.settings, value)) {
+            add_terminal_line("Font color applied.", LINE_FLAG_SYSTEM);
+        } else {
+            add_terminal_line("Unknown font color.", LINE_FLAG_SYSTEM);
+        }
+    } 
+    else if (strcmp(option, "font_size") == 0) {
+        int size = atoi(value);
+        if (set_font_size(&_terminal.settings, size)) {
+            add_terminal_line("Font size applied.", LINE_FLAG_SYSTEM);
+        } else {
+            add_terminal_line("Font size must be between 10 and 20.", LINE_FLAG_SYSTEM);
+        }
+    } 
+    else if (strcmp(option, "line_height") == 0) {
+        int height = atoi(value);
+        if (set_line_height(&_terminal.settings, height)) {
+            add_terminal_line("Line height applied.", LINE_FLAG_SYSTEM);
+        } else {
+            add_terminal_line("Line height must be between 15 and 25.", LINE_FLAG_SYSTEM);
+        }
+    } 
+    else if (strcmp(option, "theme") == 0) {
+        if (apply_theme(&_terminal.settings, value)) {
+            add_terminal_line("Theme applied.", LINE_FLAG_SYSTEM);
+        } else {
+            add_terminal_line("Unknown theme.", LINE_FLAG_SYSTEM);
+        }
+    } 
+    else {
+        add_terminal_line("Unknown setting option.", LINE_FLAG_SYSTEM);
+    }
 }
 
-// Command: to_ascii <image_url>
 void cmd_to_ascii(const char *args) {
-    _image_processing_pending = 1;  // flag for polling
+    _image_processing_pending = 1;
 
     if (!args || strlen(args) == 0) {
-        //add_line("Usage: to_ascii <image_url> [download=1 wide=300 font_size=6 bg=black color=white name=output]");
+        add_terminal_line("Usage: to_ascii <image_url> [download=1 wide=300 font_size=6 bg=black color=white name=output]", LINE_FLAG_SYSTEM);
         _image_processing_pending = 0;
         return;
     }
 
-    // Split first word (URL) and the rest (options)
     char url[1024];
     char options_str[1024] = {0};
     sscanf(args, "%1023s %[^\n]", url, options_str);
 
-    // Basic URL validation
     if (strncmp(url, "http://", 7) != 0 && strncmp(url, "https://", 8) != 0) {
-        //add_line("Error: Please provide a valid http/https URL");
+        add_terminal_line("Error: Please provide a valid http/https URL", LINE_FLAG_SYSTEM);
         _image_processing_pending = 0;
         return;
     }
 
-    // Parse options
     ExportOptions opts;
-    opts.chars_wide = 130;    // default
-    opts.font_size = 6;       // default
-    opts.fg[0]=255; opts.fg[1]=255; opts.fg[2]=255; // default white
-    opts.bg[0]=0; opts.bg[1]=0; opts.bg[2]=0;       // default black
+    opts.chars_wide = 130;
+    opts.font_size = 6;
+    opts.fg[0] = 255; opts.fg[1] = 255; opts.fg[2] = 255;
+    opts.bg[0] = 0;   opts.bg[1] = 0;   opts.bg[2] = 0;
     opts.filename = "ascii_highres.png";
 
     _image_download_pending = 0;
@@ -368,7 +355,7 @@ void cmd_to_ascii(const char *args) {
     while (*ptr) {
         if (sscanf(ptr, "%63[^=]=%63s", key, val) == 2) {
             if (strcmp(key, "download") == 0 && atoi(val) != 0) {
-                _image_download_pending = 1;
+                _image_download_pending = TRUE;
             } else if (strcmp(key, "wide") == 0) {
                 opts.chars_wide = atoi(val);
             } else if (strcmp(key, "font_size") == 0) {
@@ -382,12 +369,11 @@ void cmd_to_ascii(const char *args) {
             }
         }
 
-        // Skip to next option
         const char *next = strchr(ptr, ' ');
         if (!next) break;
         ptr = next + 1;
     }
-
+	
 	#ifdef __EMSCRIPTEN__
 		// Store the request in sessionStorage
 		EM_ASM({
@@ -397,15 +383,14 @@ void cmd_to_ascii(const char *args) {
 		}, url);
 	#endif
 
-    //add_line("Fetching and processing image...");
-    //add_line("(This may take a few seconds depending on image size)");
+    add_terminal_line("Fetching and processing image...", LINE_FLAG_SYSTEM);
+    add_terminal_line("(This may take a few seconds depending on image size)", LINE_FLAG_SYSTEM);
 
-    // Save opts globally if download is requested
     if (_image_download_pending) {
-        // copy opts to a global variable for poll_image_result
         global_opts = opts;
     }
 }
+
 
 
 void cmd_weather(const char *args) {

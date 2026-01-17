@@ -5,6 +5,8 @@
 #include <stdint.h>
 #include "sdl.h"
 
+#define RAMP_1 " .'`^\",:;Il!i~+_-?][}{1)(|\\/*tfjrxnuvczXYUJCLQ0OZmwqpdbkhao*#MW&8%B@$"
+
 /* ASCII export options (PNG generation, colors, font size) */
 typedef struct {
     int chars_wide;        /* number of characters per line */

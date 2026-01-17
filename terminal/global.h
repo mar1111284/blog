@@ -50,6 +50,10 @@
 // SECURITY
 #define ROOT_PASSWORD        "rekav"
 
+// Divers
+#define MAN_LINE_BUF 512
+#define CAT_LINE_MAX 256
+
 // SHORTCUT MACROS
 #define _terminal           app.terminal
 #define _sdl                app.sdl
@@ -187,5 +191,8 @@ void add_terminal_line(const char *text, TerminalLineFlags flags);
 void submit_input(void);
 void parse_color(const char *name, uint8_t *r, uint8_t *g, uint8_t *b);
 void update_max_scroll(void);
+
+// Scope helper
+void queue_image_request(const char *url);
 #endif
 

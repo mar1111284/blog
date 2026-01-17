@@ -19,6 +19,20 @@
 
 AppContext app = {ZERO_MEMORY};
 
+void queue_image_request(const char *url) {
+    if (!url) return;
+
+#ifdef __EMSCRIPTEN__
+    char js[2048];
+    // Escape quotes/backslashes if necessary
+    snprintf(js, sizeof(js),
+             "sessionStorage.setItem('rekav_image_request', '%s'); "
+             "console.log('C -> JS image request queued: %s');",
+             url, url);
+    emscripten_run_script(js);
+#endif
+}
+
 void app_init(void) {
 
     memset(&app, ZERO_MEMORY, sizeof(AppContext));
@@ -314,6 +328,36 @@ void submit_input(void)
     }
 
     execute_command(clean_cmd);
+    
+	// Push command to history
+	if (!awaiting_sudo_password && cmd_len > 0) {
+		char *cmd_copy = strdup(clean_cmd);
+		char *cmd_copy = strdup(clean_cmd);
+		if (cmd_copy) {
+			if (terminal.history.count == MAX_HISTORY_COMMANDS) {
+			    free(terminal.history.commands[0]);
+			    memmove(terminal.history.commands,
+			            terminal.history.commands + 1,
+			            sizeof(char*) * (MAX_HISTORY_COMMANDS - 1));
+			    terminal.history.commands[MAX_HISTORY_COMMANDS - 1] = cmd_copy;
+			} else {
+			    terminal.history.commands[terminal.history.count++] = cmd_copy;
+			}
+			terminal.history.pos = -1;
+		}
+
+		#ifdef __EMSCRIPTEN__
+			EM_ASM({
+				let hist = Module.history_array || [];
+				let cmd = UTF8ToString($0);
+				hist.push(cmd);
+				if (hist.length > 64) hist.shift();
+				Module.history_array = hist;
+				sessionStorage.setItem('rekav_history', JSON.stringify(hist));
+			}, cmd_copy);
+		#endif
+	}
+	
     reset_current_input();
     update_max_scroll();
 
@@ -542,6 +586,62 @@ void render_terminal() {
 int is_at_bottom() {
     return _terminal.scroll_offset_px >= _terminal.max_scroll - 20; // small tolerance
 }
+
+// Returns true if we handled history navigation
+static bool handle_history_navigation(SDL_Keycode key)
+{
+    if (_awaiting_sudo_password) {
+        return false; // Don't mess with password input
+    }
+
+    if (_terminal.history.count == 0) {
+        return false;
+    }
+
+    if (key == SDLK_UP) {
+        if (_terminal.history.pos == -1) {
+            _terminal.history.pos = _terminal.history.count - 1;
+        } else if (_terminal.history.pos > 0) {
+            _terminal.history.pos--;
+        } else {
+            return true;
+        }
+    }
+    else if (key == SDLK_DOWN) {
+        if (_terminal.history.pos == -1) {
+            return true;
+        }
+
+        if (_terminal.history.pos < _terminal.history.count - 1) {
+            _terminal.history.pos++;
+        } else {
+            _terminal.history.pos = -1;
+            _terminal.input.buffer[0] = '\0';
+            _terminal.input.cursor_pos = _terminal.input.prompt_len;
+            _terminal.input.dirty = TRUE;
+            return true;
+        }
+    }
+    else {
+        return false;
+    }
+
+    const char *cmd = _terminal.history.commands[_terminal.history.pos];
+    if (cmd) {
+        // Keep prompt + replace after it with loaded command
+        size_t prompt_len = _terminal.input.prompt_len;
+        size_t max_after_prompt = INPUT_MAX_CHARS - prompt_len - 1;
+
+        strncpy(terminal.input.buffer + prompt_len, cmd, max_after_prompt);
+        _terminal.input.buffer[INPUT_MAX_CHARS - 1] = '\0'; // safety
+
+        _terminal.input.cursor_pos = strlen(_terminal.input.buffer);
+        _terminal.input.dirty = TRUE;
+    }
+
+    return true;
+}
+
 void handle_keyboard_event(SDL_Event *e) {
     if (e->type == SDL_KEYDOWN) {
     
@@ -654,6 +754,10 @@ void main_loop() {
     if (_terminal.dirty || _terminal.input.dirty) {
         render_terminal();
     }
+    
+    //poll_translate_result();
+	//poll_forecast_result();
+	poll_image_result();
 }
 
 int main() {
