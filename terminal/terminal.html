@@ -28,9 +28,19 @@ canvas.emscripten { border: none; background-color: transparent; }
 	display:none;
 }
 
+#hidden-input:focus {
+    outline: none;
+}
+#canvas:focus {
+    outline: none;
+}
+
+
 </style>
   </head>
   <body>
+	  
+
     
 
     <div class="spinner" id='spinner'></div>
@@ -43,6 +53,34 @@ canvas.emscripten { border: none; background-color: transparent; }
     <div class="emscripten_border">
       <canvas class="emscripten" id="canvas" oncontextmenu="event.preventDefault()" tabindex=-1></canvas>
     </div>
+    
+    	  <!-- hidden input to trigger virtual keyboard on mobile -->
+	<input id="hidden-input" type="text" 
+		   style="position:absolute;width:1px;height:1px;left:-10px;top:-10px;opacity:0;" />
+
+	<script>
+	  const hiddenInput = document.getElementById('hidden-input');
+
+	  // On first touch, focus hidden input
+	  document.addEventListener('touchstart', () => {
+		hiddenInput.focus();
+	  });
+
+	  // Forward input to your C buffer
+	  hiddenInput.addEventListener('input', () => {
+		const val = hiddenInput.value;
+		if (val.length > 0) {
+		    Module.ccall('handle_text_input', 'void', ['string'], [val]);
+		    hiddenInput.value = '';
+		}
+	  });
+
+	  // Focus canvas/SDL (optional, for desktop)
+	  window.addEventListener('load', () => {
+		const canvas = Module['canvas'] || document.querySelector('canvas');
+		if (canvas) canvas.focus();
+	  });
+	</script>
 
 
     <script type='text/javascript'>

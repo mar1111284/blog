@@ -7,14 +7,24 @@ a{
 	text-decoration: none;
 }
 
+#hidden-input:focus {
+    outline: none;
+}
+
 #terminal-frame {
-    width: 802px;       /* match your SDL canvas */
-    height: 520px;
+    width: 800px;       /* match your SDL canvas */
+    height: 490px;
     border: none !important;       /* remove border */
     overflow: hidden;   /* remove iframe scrollbars */
     margin:0;
     padding:0;
 }
+
+
+#terminal-frame:focus {
+    outline: none;
+}
+
 
 
 body {
@@ -111,43 +121,6 @@ main {
     max-width: 1000px;
 }
 
-.terminal {
-    background-color: #111111;
-    border: 1px solid #444;
-    border-radius: 8px;
-    max-width: 800px;
-    width: 100%;
-    height: 450px;               
-    margin: 40px auto;           
-    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.8);
-    font-family: 'Ubuntu Mono', 'DejaVu Sans Mono', 'Courier New', monospace; 
-    color: #e0e0e0;
-    text-align: left;
-    display: flex;
-    flex-direction: column;
-}
-
-.terminal:focus {
-    outline: none;
-}
-
-.terminal-header {
-    background-color: #222;
-    padding: 10px 15px;
-    font-size: 0.9rem;
-    color: #aaa;
-    border-bottom: 1px solid #444;
-    text-align: center;
-    flex-shrink: 0;      
-}
-
-.terminal-body {               
-    padding: 20px;
-    overflow-y: scroll;
-    font-size: 0.85rem;
-    min-height: 0;
-}
-
 .hint {
 	color: #79c0ff;
     /*color: #ff79c6;*/
@@ -166,11 +139,13 @@ footer {
 /* General mobile adjustments (phones + small tablets) */
 @media (max-width: 768px) {
     body {
-        padding: 20px 15px;
+        padding: 0;
     }
 
     header {
-        margin-bottom: 20px;
+    	display: none;
+        margin-bottom: 10px;
+        padding: 10px;
     }
 
     h1 {
@@ -193,15 +168,12 @@ footer {
         font-size: 1.4rem;
     }
 
-    .terminal {
-        margin: 10px auto;
-        height: 350px;
-        border-radius: 6px;
-    }
-
-    .terminal-body {
-        padding: 10px;
-        font-size: 0.75rem;
+    #terminal-frame {
+    	position: absolute;
+    	top: 0;
+    	left: 0;
+    	height: 100vh;
+        width: 100vw;
     }
 }
 

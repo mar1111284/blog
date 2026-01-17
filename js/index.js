@@ -9,7 +9,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 });
 
-
 // js/index.js
 // WASM ↔ JS translation bridge (sessionStorage based)
 // Reliable, main-thread only, no direct WASM calls

@@ -1,8 +1,7 @@
-#include "settings.h"
-#include <SDL.h>
-#include <SDL_ttf.h>
 #include <string.h>
 #include <stdio.h>
+#include "global.h"
+#include "settings.h"
 
 TerminalSettings settings;
 
@@ -45,166 +44,183 @@ static const Theme predefined_themes[] = {
         "default",
         {18, 18, 18, 255},
         NULL,
-        {255, 255, 255, 255},
-        16,
-        19
+        {255, 255, 255, 255},  // font color
+        {0, 0, 0, 0},          // line bg color
+        16,                    // font size
+        19,                    // line height
+        0                      // letter spacing
     },
     {
         "msdos",
         {0, 0, 128, 255},
         NULL,
         {255, 255, 255, 255},
+        {0, 0, 0, 0},
         16,
-        18
+        18,
+        0
     },
     {
         "barbie",
-        {0, 0, 0, 255}, // unused when image is present
+        {0, 0, 0, 255},
         "assets/bg_barbie.png",
         {255, 255, 147, 255},
+        {0, 0, 0, 0},
         16,
-        20
+        20,
+        0
     },
     {
         "jurassic",
         {0, 0, 0, 255},
         "assets/bg_jurassic.png",
         {255, 140, 20, 255},
+        {0, 0, 0, 0},
         16,
-        20
+        20,
+        0
     },
     {
         "inferno",
         {30, 0, 0, 255},
         NULL,
         {255, 140, 0, 255},
+        {0, 0, 0, 0},
         16,
-        20
+        20,
+        0
+    },
+    {
+        "mobile",
+        {30, 0, 0, 255},
+        NULL,
+        {255, 140, 0, 255},
+        {0, 0, 0, 0},
+        13,
+        15,
+        0
     },
     {
         "neon_night",
         {5, 5, 20, 255},
         NULL,
         {57, 255, 20, 255},
+        {0, 0, 0, 0},
         16,
-        18
+        18,
+        0
     },
     {
         "bubblegum",
         {255, 182, 193, 255},
         NULL,
         {138, 43, 226, 255},
+        {0, 0, 0, 0},
         16,
-        20
+        20,
+        0
     },
     {
         "retro_hacker",
         {0, 0, 0, 255},
         NULL,
         {0, 255, 0, 255},
+        {0, 0, 0, 0},
         14,
-        18
+        18,
+        0
     },
     {
         "sunset_trash",
         {25, 0, 0, 255},
         NULL,
         {255, 105, 180, 255},
+        {0, 0, 0, 0},
         16,
-        19
+        19,
+        0
     },
     {
         "toxic_cyber",
         {10, 10, 10, 255},
         NULL,
         {0, 255, 255, 255},
+        {0, 0, 0, 0},
         16,
-        20
+        20,
+        0
     }
 };
 
-SDL_Texture *settings_background_texture = NULL;
+static const int PREDEFINED_THEME_COUNT = sizeof(predefined_themes) / sizeof(predefined_themes[0]);
 
-int set_line_height(int height) {
-    if (height < 8 || height > 25) {
-        return 0; // invalid
+const Theme *get_theme_info(const char *name) {
+    if (!name) return NULL;
+
+    for (int i = 0; i < PREDEFINED_THEME_COUNT; i++) {
+        if (strcmp(predefined_themes[i].name, name) == 0)
+            return &predefined_themes[i];
     }
-
-    settings.line_height = height;
-    return 1; // success
+    return NULL;
 }
 
-
 SDL_Texture* load_background(const char *path) {
+    if (!path) return NULL;
+
     SDL_Surface *surface = IMG_Load(path);
     if (!surface) {
         printf("Failed to load background: %s\n", path);
         return NULL;
     }
-    SDL_Texture *texture = SDL_CreateTextureFromSurface(renderer, surface);
+
+    SDL_Texture *texture = SDL_CreateTextureFromSurface(_sdl.renderer, surface);
     SDL_FreeSurface(surface);
-    settings.background_texture = texture;
+
+    // Optionally store in settings if you want a "current" background
+    _terminal.settings.background_texture = texture;
+
     return texture;
 }
 
-void clear_background_texture() {
-    if (settings.background_texture) {
-        SDL_DestroyTexture(settings.background_texture);
-        settings.background_texture = NULL;
-    }
-}
+int apply_theme(TerminalSettings *s, const char *theme_name) {
+    if (!s || !theme_name) return 0;
 
-
-void init_settings() {
-    // Default colors
-    settings.background = (SDL_Color){18, 18, 18, 255}; // Charcoal
-    settings.font_color = (SDL_Color){255, 255, 255, 255}; // White
-    settings.font_size = 16;
-    settings.line_height = 15;
-    settings.theme_name = "Default";
-    settings.font = TTF_OpenFont("font.ttf", settings.font_size);
-    if (!settings.font) {
-        printf("Failed to load font.ttf in init_settings\n");
-    } else {
-        TTF_SetFontStyle(settings.font, TTF_STYLE_BOLD);
-    }
-    settings.background_texture = NULL;
-}
-
-
-int apply_theme(const char *name) {
     for (int i = 0; i < sizeof(predefined_themes)/sizeof(predefined_themes[0]); i++) {
-        if (strcmp(predefined_themes[i].name, name) == 0) {
-            // Copy colors and sizes
-            settings.background = predefined_themes[i].background;
-            settings.font_color = predefined_themes[i].font_color;
-            settings.font_size = predefined_themes[i].font_size;
-            settings.line_height = predefined_themes[i].line_height;
-            settings.theme_name = predefined_themes[i].name;
+        if (strcmp(predefined_themes[i].name, theme_name) == 0) {
+            // --- Copy theme properties ---
+            s->background           = predefined_themes[i].background;
+            s->font_color           = predefined_themes[i].font_color;
+            s->line_background_color= predefined_themes[i].line_background_color;
+            s->font_size            = predefined_themes[i].font_size;
+            s->line_height          = predefined_themes[i].line_height;
+            s->letter_spacing       = predefined_themes[i].letter_spacing;
+            s->theme_name           = predefined_themes[i].name;
 
-            // Load background image if present
+            // --- Background texture ---
+            if (s->background_texture) {
+                SDL_DestroyTexture(s->background_texture);
+                s->background_texture = NULL;
+            }
+
             if (predefined_themes[i].background_image) {
-                // Free previous texture if exists
-                if (settings.background_texture) {
-                    SDL_DestroyTexture(settings.background_texture);
-                    settings.background_texture = NULL;
-                }
                 SDL_Surface *surface = IMG_Load(predefined_themes[i].background_image);
                 if (surface) {
-                    settings.background_texture = SDL_CreateTextureFromSurface(renderer, surface);
+                    s->background_texture = SDL_CreateTextureFromSurface(_sdl.renderer, surface);
                     SDL_FreeSurface(surface);
-                }
-            } else {
-                // No image for this theme
-                if (settings.background_texture) {
-                    SDL_DestroyTexture(settings.background_texture);
-                    settings.background_texture = NULL;
+                } else {
+                    printf("apply_theme: failed to load background %s\n", predefined_themes[i].background_image);
                 }
             }
 
-            // Reload font for this theme size
-            set_font_size(settings.font_size);
-            set_line_height(settings.line_height);
+            // --- Load font ---
+            if (s->font) {
+                TTF_CloseFont(s->font);
+                s->font = NULL;
+            }
+
+            s->font = TTF_OpenFont("font.ttf", s->font_size);
+            if (s->font) TTF_SetFontStyle(s->font, TTF_STYLE_BOLD);
+            else printf("apply_theme: failed to load font.ttf size %d\n", s->font_size);
 
             return 1; // success
         }
@@ -212,8 +228,6 @@ int apply_theme(const char *name) {
 
     return 0; // theme not found
 }
-
-
 
 const NamedColor *find_color(const char *name) {
     for (int i = 0; i < sizeof(predefined_colors) / sizeof(predefined_colors[0]); i++) {
@@ -233,46 +247,60 @@ const Theme *find_theme(const char *name) {
     return NULL;
 }
 
-
-int set_background_color(const char *name) {
-    for (int i = 0; i < sizeof(predefined_colors)/sizeof(predefined_colors[0]); i++) {
-        if (strcmp(predefined_colors[i].name, name) == 0) {
-            settings.background = predefined_colors[i].color;
-            return 1; // success
-        }
-    }
-    return 0; // unknown color
+int set_line_height(TerminalSettings *s, int height) {
+    if (!s || height < 8 || height > 25) return 0;
+    s->line_height = height;
+    return 1;
 }
 
-int set_font_color(const char *name) {
+void clear_background_texture(TerminalSettings *s) {
+    if (!s) return;
+    if (s->background_texture) {
+        SDL_DestroyTexture(s->background_texture);
+        s->background_texture = NULL;
+    }
+}
+
+int set_background_color(TerminalSettings *s, const char *name) {
+    if (!s || !name) return 0;
+
     for (int i = 0; i < sizeof(predefined_colors)/sizeof(predefined_colors[0]); i++) {
         if (strcmp(predefined_colors[i].name, name) == 0) {
-            settings.font_color = predefined_colors[i].color;
+            s->background = predefined_colors[i].color;
+            clear_background_texture(s); // remove any existing background image
             return 1;
         }
     }
     return 0;
 }
 
-int set_font_size(int size) {
-    if (size < 7 || size > 20) {
-        return 0; // invalid size
+int set_font_color(TerminalSettings *s, const char *name) {
+    if (!s || !name) return 0;
+
+    for (int i = 0; i < sizeof(predefined_colors)/sizeof(predefined_colors[0]); i++) {
+        if (strcmp(predefined_colors[i].name, name) == 0) {
+            s->font_color = predefined_colors[i].color;
+            return 1;
+        }
+    }
+    return 0;
+}
+
+int set_font_size(TerminalSettings *s, int size) {
+    if (!s || size < 7 || size > 20) return 0;
+
+    if (s->font) {
+        TTF_CloseFont(s->font);
+        s->font = NULL;
     }
 
-    if (settings.font) {
-        TTF_CloseFont(settings.font);
-        settings.font = NULL;
-    }
+    s->font = TTF_OpenFont("font.ttf", size);
+    if (!s->font) return 0;
 
-    settings.font = TTF_OpenFont("font.ttf", size);
-    if (!settings.font) {
-        return 0; // failed to load font
-    }
+    TTF_SetFontStyle(s->font, TTF_STYLE_BOLD);
+    s->font_size = size;
 
-    TTF_SetFontStyle(settings.font, TTF_STYLE_BOLD);
-    settings.font_size = size;
-
-    return 1; // success
+    return 1;
 }
 
 

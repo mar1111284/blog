@@ -8,6 +8,16 @@ typedef struct {
     const char *description;
 } ManEntry;
 
+typedef struct {
+    const char *name;
+    double lat;
+    double lon;
+} City;
+
+// Pointer to available pages
+extern char *available_pages[];
+extern int page_count;
+
 // Pointer to the encoded data
 extern const char *data_encoded;
 extern const char *article_0;
@@ -21,5 +31,10 @@ extern void push_base64_to_storage(const char *b64data, const char *storage_key)
 // Manual array
 extern ManEntry man_db[];
 extern int man_db_size;
+
+// Cities data
+extern City cities[];
+extern int city_count;
+
 #endif // DATA_CODEC_H
 

@@ -9,6 +9,15 @@
 #include <emscripten.h>
 #endif
 
+// List of allowed pages
+char *available_pages[] = {
+    "gallery",
+    "random",
+    "shitpost",
+    "about"
+};
+int page_count = sizeof(available_pages) / sizeof(available_pages[0]);
+
 ManEntry man_db[] = {
     {
         "translate",
@@ -110,6 +119,20 @@ ManEntry man_db[] = {
 
 };
 int man_db_size = sizeof(man_db) / sizeof(man_db[0]);
+
+City cities[] = {
+    {"Paris", 48.8566, 2.3522},
+    {"London", 51.5074, -0.1278},
+    {"New_York", 40.7128, -74.0060},
+    {"Tokyo", 35.6895, 139.6917},
+    {"Sydney", -33.8688, 151.2093},
+    {"Moscow", 55.7558, 37.6173},
+    {"Berlin", 52.52, 13.4050},
+    {"Toronto", 43.6532, -79.3832},
+    {"Rio", -22.9068, -43.1729},
+    {"Cape_Town", -33.9249, 18.4241}
+};
+int city_count = sizeof(cities) / sizeof(cities[0]);
 
 // ---- Base64 encoded JSON preview data ----
 const char *data_encoded =
