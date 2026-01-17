@@ -68,7 +68,7 @@ var ENVIRONMENT_IS_SHELL = false;
 
 // --pre-jses are emitted after the Module integration code, so that they can
 // refer to Module (if they choose; they can also define Module)
-// include: /tmp/tmp_m8uqzpj.js
+// include: /tmp/tmpij569056.js
 if (!Module["expectedDataFileDownloads"]) Module["expectedDataFileDownloads"] = 0;
 
 Module["expectedDataFileDownloads"]++;
@@ -211,23 +211,23 @@ Module["expectedDataFileDownloads"]++;
   });
 })();
 
-// end include: /tmp/tmp_m8uqzpj.js
-// include: /tmp/tmp6q2iiu3h.js
+// end include: /tmp/tmpij569056.js
+// include: /tmp/tmpe3xfg_wi.js
 // All the pre-js content up to here must remain later on, we need to run
 // it.
 if ((typeof ENVIRONMENT_IS_WASM_WORKER != "undefined" && ENVIRONMENT_IS_WASM_WORKER) || (typeof ENVIRONMENT_IS_PTHREAD != "undefined" && ENVIRONMENT_IS_PTHREAD) || (typeof ENVIRONMENT_IS_AUDIO_WORKLET != "undefined" && ENVIRONMENT_IS_AUDIO_WORKLET)) Module["preRun"] = [];
 
 var necessaryPreJSTasks = Module["preRun"].slice();
 
-// end include: /tmp/tmp6q2iiu3h.js
-// include: /tmp/tmpm3v7qcb2.js
+// end include: /tmp/tmpe3xfg_wi.js
+// include: /tmp/tmpdosmcs_j.js
 if (!Module["preRun"]) throw "Module.preRun should exist because file support used it; did a pre-js delete it?";
 
 necessaryPreJSTasks.forEach(task => {
   if (Module["preRun"].indexOf(task) < 0) throw "All preRun tasks that exist before user pre-js code should remain after; did you replace Module or modify Module.preRun?";
 });
 
-// end include: /tmp/tmpm3v7qcb2.js
+// end include: /tmp/tmpdosmcs_j.js
 var arguments_ = [];
 
 var thisProgram = "./this.program";
@@ -9960,9 +9960,9 @@ function checkIncomingModuleAPI() {
 }
 
 var ASM_CONSTS = {
-  1379336: () => window.innerWidth,
-  1379366: () => window.innerHeight,
-  1379397: $0 => {
+  1379288: () => window.innerWidth,
+  1379318: () => window.innerHeight,
+  1379349: $0 => {
     let hist = Module.history_array || [];
     let cmd = UTF8ToString($0);
     hist.push(cmd);
@@ -9970,13 +9970,13 @@ var ASM_CONSTS = {
     Module.history_array = hist;
     sessionStorage.setItem("rekav_history", JSON.stringify(hist));
   },
-  1379612: ($0, $1) => {
+  1379564: ($0, $1) => {
     const key = UTF8ToString($1);
     const value = UTF8ToString($0);
     sessionStorage.setItem(key, value);
     console.log("SessionStorage set:", key, value);
   },
-  1379762: () => {
+  1379714: () => {
     try {
       let canvas = Module["canvas"];
       if (!document.fullscreenElement) {
@@ -9988,7 +9988,7 @@ var ASM_CONSTS = {
       console.error("Fullscreen toggle error:", e);
     }
   },
-  1379965: $0 => {
+  1379917: $0 => {
     try {
       var page = UTF8ToString($0);
       window.open("/" + page + ".html", "_blank");
@@ -9996,12 +9996,12 @@ var ASM_CONSTS = {
       console.error("cmd_open JS error:", e);
     }
   },
-  1380104: $0 => {
+  1380056: $0 => {
     const url = UTF8ToString($0);
     sessionStorage.setItem("rekav_image_request", url);
     console.log("C -> JS image request queued:", url);
   },
-  1380241: ($0, $1, $2) => {
+  1380193: ($0, $1, $2) => {
     const lat = $0;
     const lon = $1;
     const city = UTF8ToString($2);
@@ -10012,7 +10012,7 @@ var ASM_CONSTS = {
     }));
     console.log("C -> JS weather request queued:", city, lat, lon);
   },
-  1380484: ($0, $1, $2) => {
+  1380436: ($0, $1, $2) => {
     const source = UTF8ToString($0);
     const target = UTF8ToString($1);
     const text = UTF8ToString($2);
@@ -10023,7 +10023,7 @@ var ASM_CONSTS = {
     }));
     console.log("C -> JS translate request queued:", source, target, text);
   },
-  1380774: ($0, $1, $2) => {
+  1380726: ($0, $1, $2) => {
     const dataPtr = $0;
     const dataLen = $1;
     const filename = UTF8ToString($2);
@@ -10038,7 +10038,7 @@ var ASM_CONSTS = {
     a.click();
     URL.revokeObjectURL(url);
   },
-  1381127: ($0, $1) => {
+  1381079: ($0, $1) => {
     const out_ptr = $0;
     const maxlen = $1;
     const res = sessionStorage.getItem("rekav_image_array");
@@ -10051,7 +10051,7 @@ var ASM_CONSTS = {
     stringToUTF8(res, out_ptr, maxlen);
     sessionStorage.removeItem("rekav_image_array");
   },
-  1381441: $0 => {
+  1381393: $0 => {
     var str = UTF8ToString($0) + "\n\n" + "Abort/Retry/Ignore/AlwaysIgnore? [ariA] :";
     var reply = window.prompt(str, "i");
     if (reply === null) {
@@ -10059,7 +10059,7 @@ var ASM_CONSTS = {
     }
     return reply.length === 1 ? reply.charCodeAt(0) : -1;
   },
-  1381656: () => {
+  1381608: () => {
     if (typeof (AudioContext) !== "undefined") {
       return true;
     } else if (typeof (webkitAudioContext) !== "undefined") {
@@ -10067,7 +10067,7 @@ var ASM_CONSTS = {
     }
     return false;
   },
-  1381803: () => {
+  1381755: () => {
     if ((typeof (navigator.mediaDevices) !== "undefined") && (typeof (navigator.mediaDevices.getUserMedia) !== "undefined")) {
       return true;
     } else if (typeof (navigator.webkitGetUserMedia) !== "undefined") {
@@ -10075,7 +10075,7 @@ var ASM_CONSTS = {
     }
     return false;
   },
-  1382037: $0 => {
+  1381989: $0 => {
     if (typeof (Module["SDL2"]) === "undefined") {
       Module["SDL2"] = {};
     }
@@ -10099,11 +10099,11 @@ var ASM_CONSTS = {
     }
     return SDL2.audioContext === undefined ? -1 : 0;
   },
-  1382589: () => {
+  1382541: () => {
     var SDL2 = Module["SDL2"];
     return SDL2.audioContext.sampleRate;
   },
-  1382657: ($0, $1, $2, $3) => {
+  1382609: ($0, $1, $2, $3) => {
     var SDL2 = Module["SDL2"];
     var have_microphone = function(stream) {
       if (SDL2.capture.silenceTimer !== undefined) {
@@ -10145,7 +10145,7 @@ var ASM_CONSTS = {
       }, have_microphone, no_microphone);
     }
   },
-  1384350: ($0, $1, $2, $3) => {
+  1384302: ($0, $1, $2, $3) => {
     var SDL2 = Module["SDL2"];
     SDL2.audio.scriptProcessorNode = SDL2.audioContext["createScriptProcessor"]($1, 0, $0);
     SDL2.audio.scriptProcessorNode["onaudioprocess"] = function(e) {
@@ -10177,7 +10177,7 @@ var ASM_CONSTS = {
       SDL2.audio.silenceTimer = setInterval(silence_callback, ($1 / SDL2.audioContext.sampleRate) * 1e3);
     }
   },
-  1385525: ($0, $1) => {
+  1385477: ($0, $1) => {
     var SDL2 = Module["SDL2"];
     var numChannels = SDL2.capture.currentCaptureBuffer.numberOfChannels;
     for (var c = 0; c < numChannels; ++c) {
@@ -10196,7 +10196,7 @@ var ASM_CONSTS = {
       }
     }
   },
-  1386130: ($0, $1) => {
+  1386082: ($0, $1) => {
     var SDL2 = Module["SDL2"];
     var buf = $0 >>> 2;
     var numChannels = SDL2.audio.currentOutputBuffer["numberOfChannels"];
@@ -10210,7 +10210,7 @@ var ASM_CONSTS = {
       }
     }
   },
-  1386619: $0 => {
+  1386571: $0 => {
     var SDL2 = Module["SDL2"];
     if ($0) {
       if (SDL2.capture.silenceTimer !== undefined) {
@@ -10244,7 +10244,7 @@ var ASM_CONSTS = {
       SDL2.audioContext = undefined;
     }
   },
-  1387625: ($0, $1, $2) => {
+  1387577: ($0, $1, $2) => {
     var w = $0;
     var h = $1;
     var pixels = $2;
@@ -10315,7 +10315,7 @@ var ASM_CONSTS = {
     }
     SDL2.ctx.putImageData(SDL2.image, 0, 0);
   },
-  1389091: ($0, $1, $2, $3, $4) => {
+  1389043: ($0, $1, $2, $3, $4) => {
     var w = $0;
     var h = $1;
     var hot_x = $2;
@@ -10352,18 +10352,18 @@ var ASM_CONSTS = {
     stringToUTF8(url, urlBuf, url.length + 1);
     return urlBuf;
   },
-  1390079: $0 => {
+  1390031: $0 => {
     if (Module["canvas"]) {
       Module["canvas"].style["cursor"] = UTF8ToString($0);
     }
   },
-  1390162: () => {
+  1390114: () => {
     if (Module["canvas"]) {
       Module["canvas"].style["cursor"] = "none";
     }
   },
-  1390231: () => window.innerWidth,
-  1390261: () => window.innerHeight
+  1390183: () => window.innerWidth,
+  1390213: () => window.innerHeight
 };
 
 // Imports from the Wasm binary.

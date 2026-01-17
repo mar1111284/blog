@@ -329,21 +329,19 @@ void submit_input(void)
 
     execute_command(clean_cmd);
     
-	// Push command to history
-	if (!awaiting_sudo_password && cmd_len > 0) {
-		char *cmd_copy = strdup(clean_cmd);
+	if (!_awaiting_sudo_password && cmd_len > 0) {
 		char *cmd_copy = strdup(clean_cmd);
 		if (cmd_copy) {
-			if (terminal.history.count == MAX_HISTORY_COMMANDS) {
-			    free(terminal.history.commands[0]);
-			    memmove(terminal.history.commands,
-			            terminal.history.commands + 1,
+			if (_terminal.history.count == MAX_HISTORY_COMMANDS) {
+			    free(_terminal.history.commands[0]);
+			    memmove(_terminal.history.commands,
+			            _terminal.history.commands + 1,
 			            sizeof(char*) * (MAX_HISTORY_COMMANDS - 1));
-			    terminal.history.commands[MAX_HISTORY_COMMANDS - 1] = cmd_copy;
+			    _terminal.history.commands[MAX_HISTORY_COMMANDS - 1] = cmd_copy;
 			} else {
-			    terminal.history.commands[terminal.history.count++] = cmd_copy;
+			    _terminal.history.commands[_terminal.history.count++] = cmd_copy;
 			}
-			terminal.history.pos = -1;
+			_terminal.history.pos = -1;
 		}
 
 		#ifdef __EMSCRIPTEN__
@@ -616,9 +614,8 @@ static bool handle_history_navigation(SDL_Keycode key)
             _terminal.history.pos++;
         } else {
             _terminal.history.pos = -1;
-            _terminal.input.buffer[0] = '\0';
-            _terminal.input.cursor_pos = _terminal.input.prompt_len;
-            _terminal.input.dirty = TRUE;
+            reset_current_input();
+            _terminal.dirty = TRUE;
             return true;
         }
     }
@@ -628,17 +625,16 @@ static bool handle_history_navigation(SDL_Keycode key)
 
     const char *cmd = _terminal.history.commands[_terminal.history.pos];
     if (cmd) {
-        // Keep prompt + replace after it with loaded command
         size_t prompt_len = _terminal.input.prompt_len;
         size_t max_after_prompt = INPUT_MAX_CHARS - prompt_len - 1;
 
-        strncpy(terminal.input.buffer + prompt_len, cmd, max_after_prompt);
+        strncpy(_terminal.input.buffer + prompt_len, cmd, max_after_prompt);
         _terminal.input.buffer[INPUT_MAX_CHARS - 1] = '\0'; // safety
 
         _terminal.input.cursor_pos = strlen(_terminal.input.buffer);
         _terminal.input.dirty = TRUE;
     }
-
+	_terminal.dirty = TRUE;
     return true;
 }
 
@@ -650,6 +646,10 @@ void handle_keyboard_event(SDL_Event *e) {
 			_terminal.scroll_offset_px = _terminal.max_scroll;
 		}
         SDL_Keycode key = e->key.keysym.sym;
+        
+        if (handle_history_navigation(key)) {
+            return;
+        }
         
         if (key == SDLK_RETURN || key == SDLK_KP_ENTER) {
 		    submit_input();
