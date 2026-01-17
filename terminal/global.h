@@ -43,6 +43,10 @@
 // FILES / EXPORT
 #define MAX_PNG_SIZE  (50 * 1024 * 1024)
 
+// Extension
+#define PAGE_EXT ".html"
+#define PAGE_EXT_LEN 5
+
 // SECURITY
 #define ROOT_PASSWORD        "rekav"
 
