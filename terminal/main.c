@@ -17,33 +17,21 @@
 #include "translate.h"
 #include "forecast.h"
 
-const VersionInfo VERSION_INFO = {
-    .app = "1.0",
-    .terminal = "1.0",
-    .weather_forecast = "1.0",
-    .ascii_converter = "1.0",
-    .translator = "1.0",
-};
-
 AppContext app = {ZERO_MEMORY};
-
-void queue_image_request(const char *url) {
-    if (!url) return;
-
-#ifdef __EMSCRIPTEN__
-    char js[2048];
-    // Escape quotes/backslashes if necessary
-    snprintf(js, sizeof(js),
-             "sessionStorage.setItem('rekav_image_request', '%s'); "
-             "console.log('C -> JS image request queued: %s');",
-             url, url);
-    emscripten_run_script(js);
-#endif
-}
 
 void app_init(void) {
 
     memset(&app, ZERO_MEMORY, sizeof(AppContext));
+
+    VersionInfo v = {
+        .app               = {"1.0", "2026-01-18"},
+        .terminal          = {"1.0", "2026-01-17"},
+        .weather_forecast  = {"1.0", "2026-01-16"},
+        .ascii_converter   = {"1.0", "2026-01-15"},
+        .translator        = {"1.0", "2026-01-14"}
+    };
+
+    app.version = v; 
 
 	#ifdef __EMSCRIPTEN__
 		app.config.viewport_width  = EM_ASM_INT({ return window.innerWidth; });
@@ -66,6 +54,7 @@ void app_init(void) {
     apply_theme(&app.terminal.settings, THEME_INFERNO);
 
     app.terminal.running = TRUE;
+    app.terminal.tick_rate = MEDIUM; // 30 FPS
     app.terminal.width   = app.config.viewport_width;
     app.terminal.height  = app.config.viewport_height;
     app.terminal.scroll_offset_px = ZERO_MEMORY;
@@ -77,6 +66,15 @@ void app_init(void) {
     for (int i = 0; i < MAX_HISTORY_COMMANDS; i++) {
         app.terminal.history.commands[i] = NULL;
     }
+    
+    _terminal.log_visible = FALSE;
+	_terminal.log_count = 0;
+
+	for (int i = 0; i < LOG_MAX_LINES; i++) {
+		_terminal.logs[i].type = LOG_INFO;
+		_terminal.logs[i].datetime[0] = '\0';
+		_terminal.logs[i].text[0] = '\0';
+	}
 
     if (!app.terminal.settings.font) {
         app.terminal.settings.font = TTF_OpenFont(FONT_PATH, app.config.font_size);
@@ -229,9 +227,24 @@ void app_cleanup(void) {
     }
 }
 
-const char* get_current_prompt() {
-    if (_awaiting_sudo_password) return "password: ";
-    if (_root_active) return "root@rekav:~$ ";
+static inline BOOL terminal_is_busy(void) {
+    return _translation_pending
+        || _weather_forecast_pending
+        || _image_processing_pending
+        || _image_download_pending;
+}
+
+const char* get_current_prompt(void) {
+
+    if (terminal_is_busy())
+        return "[working...] ";
+
+    if (_awaiting_sudo_password)
+        return "password: ";
+
+    if (_root_active)
+        return "root@rekav:~$ ";
+
     return DEFAULT_PROMPT;
 }
 
@@ -364,6 +377,7 @@ void submit_input(void)
 		#endif
 	}
 	
+	
     reset_current_input();
     update_max_scroll();
 
@@ -397,84 +411,112 @@ void reset_current_input() {
     _terminal.input.texture_w = 0;
     _terminal.input.texture_h = 0;
 }
-void add_terminal_line(const char *text, TerminalLineFlags flags) {
 
-    if (_terminal.line_count >= MAX_LINES) {
-        for (int i = 0; i < MAX_LINES - 1; i++) {
-            if (_terminal.lines[i].texture) SDL_DestroyTexture(_terminal.lines[i].texture);
-            _terminal.lines[i] = _terminal.lines[i + 1];
+void add_terminal_line(const char *text, TerminalLineFlags flags)
+{
+    // ─────────────────────────────────────────────
+    // FIFO: if buffer is full, drop the oldest line
+    // ─────────────────────────────────────────────
+    if (_terminal.line_count == MAX_LINES) {
+
+        // Destroy texture of the oldest line
+        if (_terminal.lines[0].texture) {
+            SDL_DestroyTexture(_terminal.lines[0].texture);
+            _terminal.lines[0].texture = NULL;
         }
+
+        // Shift everything up by one (FIFO)
+        memmove(
+            &_terminal.lines[0],
+            &_terminal.lines[1],
+            sizeof(TerminalLine) * (MAX_LINES - 1)
+        );
+
         _terminal.line_count = MAX_LINES - 1;
     }
 
-    TerminalLine *line = &_terminal.lines[_terminal.line_count];
-    strncpy(line->text, text, MAX_LINE_LENGTH - 1);
-    line->text[MAX_LINE_LENGTH - 1] = '\0';
+    // ─────────────────────────────────────────────
+    // Append new line at tail
+    // ─────────────────────────────────────────────
+    int idx = _terminal.line_count;
+    TerminalLine *line = &_terminal.lines[idx];
+
+    // Reset the slot completely
+    memset(line, 0, sizeof(*line));
+
+    // ─────────────────────────────────────────────
+    // UTF-8 safe copy
+    // ─────────────────────────────────────────────
+    size_t len = strnlen(text, MAX_LINE_LENGTH - 1);
+    while (len > 0 && (text[len] & 0xC0) == 0x80) len--;
+    memcpy(line->text, text, len);
+    line->text[len] = '\0';
+
+    // ─────────────────────────────────────────────
+    // Style & flags
+    // ─────────────────────────────────────────────
     SDL_Color font_color = _terminal.settings.font_color;
     SDL_Color bg_color   = _terminal.settings.line_background_color;
     int font_style = TTF_STYLE_NORMAL;
 
     if (flags & LINE_FLAG_ERROR) {
-        font_color = COLOR_RED_RGB;          
+        font_color = COLOR_RED_RGB;
     } else if (flags & LINE_FLAG_SYSTEM) {
-        font_color = COLOR_CYAN_RGB;         
+        font_color = COLOR_CYAN_RGB;
     } else if (flags & LINE_FLAG_HIGHLIGHT) {
-        font_color = COLOR_YELLOW_RGB;       
+        font_color = COLOR_YELLOW_RGB;
     } else if (flags & LINE_FLAG_WARNING) {
-        font_color = COLOR_ORANGE_RGB;      
+        font_color = COLOR_ORANGE_RGB;
     }
 
-    line->font          = _terminal.settings.font;
-    line->font_color    = font_color;
+    line->font             = _terminal.settings.font;
+    line->font_color       = font_color;
     line->background_color = bg_color;
     line->letter_spacing   = _terminal.settings.letter_spacing;
-    line->flags         = flags;
+    line->flags            = flags;
+    line->dirty            = TRUE;
+    line->cursor_index     = 0;
 
     TTF_SetFontStyle(line->font, font_style);
-    int max_width = _terminal.width - TERMINAL_PADDING_LEFT - TERMINAL_PADDING_RIGHT - 4;
-    SDL_Surface* surface = TTF_RenderText_Blended_Wrapped(line->font, line->text, line->font_color, max_width);
+
+    // ─────────────────────────────────────────────
+    // Render text
+    // ─────────────────────────────────────────────
+    int max_width = _terminal.width
+                  - TERMINAL_PADDING_LEFT
+                  - TERMINAL_PADDING_RIGHT
+                  - 4;
+
+    SDL_Surface *surface = TTF_RenderUTF8_Blended_Wrapped(
+        line->font,
+        line->text,
+        line->font_color,
+        max_width
+    );
 
     if (surface) {
-        if (line->texture) SDL_DestroyTexture(line->texture);
         line->texture = SDL_CreateTextureFromSurface(_sdl.renderer, surface);
-        line->width  = surface->w;
-        line->height = surface->h;
+        line->width   = surface->w;
+        line->height  = surface->h;
         line->line_height = surface->h;
         SDL_FreeSurface(surface);
     } else {
         line->texture = NULL;
         line->width = 0;
         line->height = 0;
-        line->line_height = 16;
+        line->line_height = _terminal.settings.line_height;
     }
 
+    // ─────────────────────────────────────────────
+    // Finalize
+    // ─────────────────────────────────────────────
     _terminal.line_count++;
     _terminal.dirty = TRUE;
+
     update_max_scroll();
     _terminal.scroll_offset_px = _terminal.max_scroll;
 }
 
-void create_line_texture(TerminalLine *line, SDL_Renderer *renderer, TTF_Font *font) {
-    if (line->texture) {
-        SDL_DestroyTexture(line->texture);
-        line->texture = NULL;
-    }
-
-    int max_width = _terminal.width - TERMINAL_PADDING_LEFT - TERMINAL_PADDING_RIGHT - 10;
-
-    SDL_Surface *surface = TTF_RenderText_Blended_Wrapped(font, line->text, line->font_color, max_width);
-    if (!surface) return;
-
-    line->texture = SDL_CreateTextureFromSurface(renderer, surface);
-    if (line->texture) {
-        line->width = surface->w;
-        line->height = surface->h;
-    } else {
-        line->width = 0;
-        line->height = 0;
-    }
-    SDL_FreeSurface(surface);
-}
 
 void update_input_texture(void)
 {
@@ -546,6 +588,8 @@ void update_input_texture(void)
 }
 
 void render_terminal() {
+
+	// Background
     SDL_SetRenderDrawColor(_sdl.renderer,
         _terminal.settings.background.r, _terminal.settings.background.g,
         _terminal.settings.background.b, _terminal.settings.background.a);
@@ -554,7 +598,8 @@ void render_terminal() {
     if (_terminal.settings.background_texture) {
         SDL_RenderCopy(_sdl.renderer, _terminal.settings.background_texture, NULL, NULL);
     }
-
+	
+	// Lines
 	int y = TERMINAL_PADDING_TOP - _terminal.scroll_offset_px;
 
 		for (int i = 0; i < _terminal.line_count; i++) {
@@ -643,6 +688,23 @@ static bool handle_history_navigation(SDL_Keycode key)
     return true;
 }
 
+void insert_text_at_cursor(const char *text) {
+    int pos = _terminal.input.cursor_pos; // byte offset
+    size_t text_len = strlen(text);       // UTF-8 bytes
+    size_t buf_len = strlen(_terminal.input.buffer);
+
+    if (buf_len + text_len >= INPUT_MAX_CHARS) return;
+
+    memmove(_terminal.input.buffer + pos + text_len,
+            _terminal.input.buffer + pos,
+            buf_len - pos + 1); // +1 for '\0'
+
+    memcpy(_terminal.input.buffer + pos, text, text_len);
+
+    _terminal.input.cursor_pos += text_len;
+    _terminal.input.dirty = TRUE;
+}
+
 void handle_keyboard_event(SDL_Event *e) {
     if (e->type == SDL_KEYDOWN) {
     
@@ -699,30 +761,38 @@ void handle_keyboard_event(SDL_Event *e) {
         }
     }
 
-    if (e->type == SDL_TEXTINPUT) {
-        const char *text = e->text.text;
-        size_t text_len = strlen(text);
+	if (e->type == SDL_TEXTINPUT) {
+		const char *text = e->text.text; // UTF-8 input
+		size_t text_len = strlen(text);
 
-        int current_len = strlen(_terminal.input.buffer);
-        int pos = _terminal.input.cursor_pos;
+		int pos = _terminal.input.cursor_pos;
+		size_t current_len = strlen(_terminal.input.buffer);
 
-        if (current_len + text_len >= INPUT_MAX_CHARS - 1) {
-            return;
-        }
+		if (current_len + text_len >= INPUT_MAX_CHARS - 1) {
+		    return;
+		}
 
-        memmove(
-            _terminal.input.buffer + pos + text_len,
-            _terminal.input.buffer + pos,
-            current_len - pos + 1
-        );
-
-        memcpy(_terminal.input.buffer + pos, text, text_len);
-        _terminal.input.cursor_pos += text_len;
-        _terminal.input.dirty = TRUE;
-    }
+		memmove(
+		    _terminal.input.buffer + pos + text_len,
+		    _terminal.input.buffer + pos,
+		    current_len - pos + 1
+		);
+		memcpy(_terminal.input.buffer + pos, text, text_len);
+		_terminal.input.cursor_pos += (int)text_len;
+		_terminal.input.dirty = TRUE;
+	}
 }
 
-void main_loop() {
+int tick_rate = MEDIUM;
+void main_loop(RENDER_TICK tick_rate) {
+    static Uint32 last_tick = 0;
+    Uint32 now = SDL_GetTicks();
+
+    // Limit tick rate
+    if (now - last_tick < tick_rate)
+        return; // skip this frame
+    last_tick = now;
+
     SDL_Event e;
     while (SDL_PollEvent(&e)) {
         switch (e.type) {
@@ -734,41 +804,99 @@ void main_loop() {
             case SDL_TEXTINPUT:
                 handle_keyboard_event(&e);
                 break;
-                
-           case SDL_MOUSEWHEEL:
-		    _terminal.scroll_offset_px -= e.wheel.y * SCROLL_DELTA_MULTIPLIER;
 
-		    if (_terminal.scroll_offset_px < 0)
-		        _terminal.scroll_offset_px = 0;
-		    if (_terminal.scroll_offset_px > _terminal.max_scroll)
-		        _terminal.scroll_offset_px = _terminal.max_scroll;
+            case SDL_MOUSEWHEEL:
+                _terminal.scroll_offset_px -= e.wheel.y * SCROLL_DELTA_MULTIPLIER;
+                if (_terminal.scroll_offset_px < 0)
+                    _terminal.scroll_offset_px = 0;
+                if (_terminal.scroll_offset_px > _terminal.max_scroll)
+                    _terminal.scroll_offset_px = _terminal.max_scroll;
+                _terminal.dirty = TRUE;
+                break;
 
-		    _terminal.dirty = TRUE;
-		    break;
-
-			case SDL_WINDOWEVENT:
-				if (e.window.event == SDL_WINDOWEVENT_RESIZED) {
-				    _terminal.width = e.window.data1;
-				    _terminal.height = e.window.data2;
-				    update_max_scroll();
-				    _terminal.dirty = TRUE;
-				}
-				break;
+            case SDL_WINDOWEVENT:
+                if (e.window.event == SDL_WINDOWEVENT_RESIZED) {
+                    _terminal.width  = e.window.data1;
+                    _terminal.height = e.window.data2;
+                    update_max_scroll();
+                    _terminal.dirty = TRUE;
+                }
+                break;
         }
     }
+
     if (_terminal.dirty || _terminal.input.dirty) {
         render_terminal();
     }
-    
-    //poll_translate_result();
-	poll_forecast_result();
-	poll_image_result();
+	
+	if (_translation_pending) {
+	    poll_translate_result();
+    }
+    if (_weather_forecast_pending) {
+	    poll_forecast_result();
+    }
+    if (_image_processing_pending) {
+	    poll_image_result();
+    }
+}
+
+void emscripten_loop_wrapper() {
+    main_loop(MEDIUM);
 }
 
 int main() {
 	app_init();
-    emscripten_set_main_loop(main_loop, FALSE, TRUE);
+	
+	while (_terminal.running) {
+	    emscripten_set_main_loop(emscripten_loop_wrapper, FALSE, TRUE);
+		SDL_Delay(1);
+	}
+
     cleanup_sdl(&_sdl);
     return 0;
 }
+
+void add_log(const char *text, LogType type) {
+    if (!_terminal.log_count) _terminal.log_count = 0;
+
+    int idx = (_terminal.log_count < LOG_MAX_LINES) ? _terminal.log_count : 0;
+
+    // Timestamp
+    time_t now = time(NULL);
+    struct tm *t = localtime(&now);
+    if (t) {
+        snprintf(_terminal.logs[idx].datetime, sizeof(_terminal.logs[idx].datetime),
+                 "%04d-%02d-%02d %02d:%02d:%02d",
+                 t->tm_year + 1900, t->tm_mon + 1, t->tm_mday,
+                 t->tm_hour, t->tm_min, t->tm_sec);
+    } else {
+        strncpy(_terminal.logs[idx].datetime, "0000-00-00 00:00:00", sizeof(_terminal.logs[idx].datetime));
+    }
+
+    // Store type and text
+    _terminal.logs[idx].type = type;
+    strncpy(_terminal.logs[idx].text, text, LOG_MAX_TEXT - 1);
+    _terminal.logs[idx].text[LOG_MAX_TEXT - 1] = '\0';
+
+    if (_terminal.log_count < LOG_MAX_LINES) _terminal.log_count++;
+
+    // Prepare formatted string
+    char buf[600];
+    const char *type_str = "";
+    switch (type) {
+        case LOG_INFO:    type_str = "[INFO]"; break;
+        case LOG_WARNING: type_str = "[WARN]"; break;
+        case LOG_ERROR:   type_str = "[ERROR]"; break;
+        case LOG_FATAL:   type_str = "[FATAL]"; break;
+    }
+    snprintf(buf, sizeof(buf), "%s %s %s", _terminal.logs[idx].datetime, type_str, _terminal.logs[idx].text);
+
+    // Only print to terminal if log_visible is true
+    if (_terminal.log_visible) {
+        add_terminal_line(buf, LINE_FLAG_SYSTEM);
+    }
+}
+
+
+
 

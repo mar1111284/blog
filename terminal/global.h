@@ -7,6 +7,7 @@
 #include <SDL.h>
 #include <SDL_ttf.h>
 #include <stdbool.h>
+#include "time.h"
 
 // GENERAL / APP INFO
 #define ZERO_MEMORY           0
@@ -34,7 +35,7 @@
 #define SCROLL_DELTA_MULTIPLIER 32
 
 // INPUT / HISTORY
-#define MAX_LINES             256
+#define MAX_LINES             128
 #define MAX_LINE_LENGTH       512
 #define MAX_HISTORY_COMMANDS  128
 #define INPUT_MAX_CHARS       256
@@ -50,9 +51,11 @@
 // SECURITY
 #define ROOT_PASSWORD        "rekav"
 
-// Divers
+// Divers buffer size
 #define MAN_LINE_BUF 512
 #define CAT_LINE_MAX 256
+#define LOG_MAX_LINES 128
+#define LOG_MAX_TEXT 256
 
 // SHORTCUT MACROS
 #define _terminal           app.terminal
@@ -68,14 +71,32 @@
 #define _history            app.terminal.history
 
 typedef struct {
-    const char *app;
-    const char *terminal;
-    const char *weather_forecast;
-    const char *ascii_converter;
-    const char *translator;
+    const char *version;
+    const char *release_date;
+} ComponentVersion;
+
+typedef struct {
+    ComponentVersion app;
+    ComponentVersion terminal;
+    ComponentVersion weather_forecast;
+    ComponentVersion ascii_converter;
+    ComponentVersion translator;
 } VersionInfo;
 
-extern const VersionInfo VERSION_INFO;
+typedef enum {
+    LOG_INFO,
+    LOG_WARNING,
+    LOG_ERROR,
+    LOG_FATAL
+} LogType;
+
+typedef struct {
+    char datetime[32];          // e.g., "2026-01-18 12:34:56"
+    LogType type;               // log level
+    char text[LOG_MAX_TEXT];    // message
+    int id;                     // optional unique ID
+} TerminalLog;
+
 
 typedef enum {
     FAST  = 16,
@@ -153,6 +174,12 @@ typedef struct Terminal {
         int pos;
     } history;
     
+    TerminalLog logs[LOG_MAX_LINES];
+    int log_count;
+    int next_log_id;
+    RENDER_TICK tick_rate;
+    bool log_visible;
+    
 } Terminal;
 
 typedef struct {
@@ -175,6 +202,7 @@ typedef struct {
 
     // Timing / activity
     Uint32        last_activity;
+    VersionInfo version;
 
     // Add future globals here when needed
 } AppContext;
@@ -200,8 +228,6 @@ void add_terminal_line(const char *text, TerminalLineFlags flags);
 void submit_input(void);
 void parse_color(const char *name, uint8_t *r, uint8_t *g, uint8_t *b);
 void update_max_scroll(void);
-
-// Scope helper
-void queue_image_request(const char *url);
+void add_log( const char *text, LogType type);
 #endif
 

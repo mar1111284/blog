@@ -12,12 +12,17 @@ RAMP 1 — Wide tonal range (smooth gradients)
 RAMP 2 — High contrast (bold shapes)
 RAMP 3 — Monospace optimized (terminal-friendly)
 RAMP 4 — Unicode enhanced (highest visual fidelity)
+RAMP 5 — Matrix
+RAMP 6 — Binary
 */
 
 #define RAMP_1 " .'`^\",:;Il!i~+_-?][}{1)(|\\/*tfjrxnuvczXYUJCLQ0OZmwqpdbkhao*#MW&8%B@$"
 #define RAMP_2 " .:-=+*#%@"
 #define RAMP_3 "$@B%8&WM#*oahkbdpqwmZO0QLCJUYXzcvunxrjft/\\|()1{}[]?-_+~<>i!lI;:,\"^`'. "
 #define RAMP_4 " ░▒▓█"
+#define RAMP_5 " 01|/\\#"
+#define RAMP_6 " 01"
+
 
 /* ASCII export options (PNG generation, colors, font size) */
 typedef struct {
@@ -42,6 +47,7 @@ extern int image_download_pending;
 static SDL_Texture *pixel_art_texture;
 static SDL_Rect pixel_art_dst;
 extern ExportOptions global_opts;
+void reset_export_options(ExportOptions *opts);
 
 /* Core API */
 void process_image_to_pixels(unsigned char *raw_data, int raw_size);

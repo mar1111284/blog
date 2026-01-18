@@ -32,7 +32,7 @@ Command commands[] = {
     {"to_ascii", "Convert image from URL to ASCII art", cmd_to_ascii},
     {"debug", "App debug dump",app_debug_dump },
     {"version", "Version",cmd_version },
-
+    {"log", "Log message",cmd_log },
 };
 
 int command_count = sizeof(commands) / sizeof(commands[0]);
@@ -63,6 +63,65 @@ void execute_command(const char *cmd) {
     add_terminal_line("Unknown command. Type 'help'", LINE_FLAG_SYSTEM);
 }
 
+void cmd_log(const char *args) {
+    if (!args || strlen(args) == 0) {
+        add_terminal_line("Usage: log [visible=0|1] [list]", LINE_FLAG_SYSTEM);
+        return;
+    }
+
+    char key[64], val[64];
+    const char *ptr = args;
+    BOOL show_list = FALSE;
+
+    while (*ptr) {
+        if (sscanf(ptr, "%63[^= ]=%63s", key, val) == 2) {
+            if (strcmp(key, "visible") == 0) {
+                _terminal.log_visible = (atoi(val) != 0) ? TRUE : FALSE;
+                char buf[128];
+                snprintf(buf, sizeof(buf), "Terminal log visibility set to %s", _terminal.log_visible ? "ON" : "OFF");
+                add_terminal_line(buf, LINE_FLAG_SYSTEM);
+            }
+        } else {
+            // handle flags without "=" like "list"
+            char word[64];
+            if (sscanf(ptr, "%63s", word) == 1) {
+                if (strcmp(word, "list") == 0) {
+                    show_list = TRUE;
+                }
+            }
+        }
+
+        const char *next = strchr(ptr, ' ');
+        if (!next) break;
+        ptr = next + 1;
+    }
+
+    if (show_list) {
+        add_terminal_line("\n--- Terminal Logs ---", LINE_FLAG_SYSTEM);
+
+        for (int i = 0; i < _terminal.log_count; i++) {
+            TerminalLog *log = &_terminal.logs[i];
+            char line[512];
+            const char *type_str = "INFO";
+            switch (log->type) {
+                case LOG_INFO:    type_str = "INFO"; break;
+                case LOG_WARNING: type_str = "WARN"; break;
+                case LOG_ERROR:   type_str = "ERROR"; break;
+                case LOG_FATAL:   type_str = "FATAL"; break;
+            }
+
+            snprintf(line, sizeof(line), "[%s] (%s) #%d: %s",
+                     log->datetime, type_str, log->id, log->text);
+
+            add_terminal_line(line, LINE_FLAG_NONE);
+        }
+
+        add_terminal_line("--- End of Logs ---\n", LINE_FLAG_SYSTEM);
+    }
+}
+
+
+
 void cmd_version(const char *args) {
 
     add_terminal_line("", LINE_FLAG_NONE);
@@ -75,19 +134,24 @@ void cmd_version(const char *args) {
 
     char buf[128];
 
-    snprintf(buf, sizeof(buf), "  App               : %s", VERSION_INFO.app);
+    snprintf(buf, sizeof(buf), "  App               : %s (%s)", 
+             app.version.app.version, app.version.app.release_date);
     add_terminal_line(buf, LINE_FLAG_NONE);
 
-    snprintf(buf, sizeof(buf), "  Terminal          : %s", VERSION_INFO.terminal);
+    snprintf(buf, sizeof(buf), "  Terminal          : %s (%s)", 
+             app.version.terminal.version, app.version.terminal.release_date);
     add_terminal_line(buf, LINE_FLAG_NONE);
 
-    snprintf(buf, sizeof(buf), "  Weather Forecast  : %s", VERSION_INFO.weather_forecast);
+    snprintf(buf, sizeof(buf), "  Weather Forecast  : %s (%s)", 
+             app.version.weather_forecast.version, app.version.weather_forecast.release_date);
     add_terminal_line(buf, LINE_FLAG_NONE);
 
-    snprintf(buf, sizeof(buf), "  ASCII Converter   : %s", VERSION_INFO.ascii_converter);
+    snprintf(buf, sizeof(buf), "  ASCII Converter   : %s (%s)", 
+             app.version.ascii_converter.version, app.version.ascii_converter.release_date);
     add_terminal_line(buf, LINE_FLAG_NONE);
 
-    snprintf(buf, sizeof(buf), "  Translator        : %s", VERSION_INFO.translator);
+    snprintf(buf, sizeof(buf), "  Translator        : %s (%s)", 
+             app.version.translator.version, app.version.translator.release_date);
     add_terminal_line(buf, LINE_FLAG_NONE);
 
     add_terminal_line("", LINE_FLAG_NONE);
@@ -119,7 +183,8 @@ void cmd_help(const char *args) {
     add_terminal_line("  man <command>                - Show command documentation", LINE_FLAG_NONE);
     add_terminal_line("  to_ascii <link>              - Convert image to ASCII", LINE_FLAG_NONE);
     add_terminal_line("  debug                        - Get App context dump (dev)", LINE_FLAG_NONE);
-
+    add_terminal_line("  log                          - Get log messages", LINE_FLAG_NONE);
+    
     add_terminal_line("", LINE_FLAG_NONE);
     add_terminal_line("--------------------------------------------------", LINE_FLAG_NONE);
     add_terminal_line("        Type 'man <command>' for more info       ", LINE_FLAG_NONE);
@@ -286,28 +351,18 @@ void cmd_settings(const char *args) {
     char option[64];
     char value[64];
 
-    if (!args || strlen(args) == 0) {
-        add_terminal_line("", LINE_FLAG_NONE);
-        add_terminal_line("--------------------------------------------------", LINE_FLAG_NONE);
-        add_terminal_line("                   SETTINGS                       ", LINE_FLAG_NONE);
-        add_terminal_line("--------------------------------------------------", LINE_FLAG_NONE);
-        add_terminal_line("", LINE_FLAG_NONE);
+	if (!args || strlen(args) == 0) {
+		print_settings_help();
+		return;
+	}
 
-        add_terminal_line("Usage: settings <option> <value>", LINE_FLAG_SYSTEM);
-        add_terminal_line("", LINE_FLAG_NONE);
-        add_terminal_line("Options:", LINE_FLAG_NONE);
-        add_terminal_line("  bg           - Background color (charcoal, dos_blue, pink, green, red)", LINE_FLAG_NONE);
-        add_terminal_line("  font_color   - Font color (white, green, pink, red, orange)", LINE_FLAG_NONE);
-        add_terminal_line("  font_size    - Font size (10-20)", LINE_FLAG_NONE);
-        add_terminal_line("  line_height  - Line height (15-25)", LINE_FLAG_NONE);
-        add_terminal_line("  theme        - Predefined themes (default, msdos, barbie, jurassic, inferno)", LINE_FLAG_NONE);
+    if (args && strcmp(args, "--list-themes") == 0) {
+        list_themes();
+        return;
+    }
 
-        add_terminal_line("", LINE_FLAG_NONE);
-        add_terminal_line("--------------------------------------------------", LINE_FLAG_NONE);
-        add_terminal_line("       Example: settings bg charcoal            ", LINE_FLAG_NONE);
-        add_terminal_line("--------------------------------------------------", LINE_FLAG_NONE);
-        add_terminal_line("", LINE_FLAG_NONE);
-
+    if (args && strcmp(args, "--list-colors") == 0) {
+        list_colors();
         return;
     }
 
@@ -378,12 +433,14 @@ void cmd_to_ascii(const char *args) {
         return;
     }
 
+	// Default
     ExportOptions opts;
     opts.chars_wide = 130;
-    opts.font_size = 6;
+    opts.font_size = 7;
+    opts.ramp = RAMP_1;
     opts.fg[0] = 255; opts.fg[1] = 255; opts.fg[2] = 255;
     opts.bg[0] = 0;   opts.bg[1] = 0;   opts.bg[2] = 0;
-    opts.filename = "ascii_highres.png";
+    opts.filename = "ascii_art.png";
 
     _image_download_pending = 0;
 
@@ -409,6 +466,8 @@ void cmd_to_ascii(const char *args) {
                 else if (r == 2) opts.ramp = RAMP_2;
                 else if (r == 3) opts.ramp = RAMP_3;
                 else if (r == 4) opts.ramp = RAMP_4;
+				else if (r == 5) opts.ramp = RAMP_5;
+				else if (r == 6) opts.ramp = RAMP_6;
                 else             opts.ramp = RAMP_1;
             }
         }
@@ -429,10 +488,7 @@ void cmd_to_ascii(const char *args) {
 
     add_terminal_line("Fetching and processing image...", LINE_FLAG_SYSTEM);
     add_terminal_line("(This may take a few seconds depending on image size)", LINE_FLAG_SYSTEM);
-
-    if (_image_download_pending) {
-        global_opts = opts;
-    }
+    global_opts = opts;
 }
 
 
@@ -460,21 +516,20 @@ void cmd_weather(const char *args) {
         return;
     }
 
-#ifdef __EMSCRIPTEN__
-    EM_ASM({
-        const lat = $0;
-        const lon = $1;
-        const city = UTF8ToString($2);
-        sessionStorage.setItem(
-            "rekav_weather_request",
-            JSON.stringify({ latitude: lat, longitude: lon, city: city })
-        );
-        console.log("C -> JS weather request queued:", city, lat, lon);
-    }, selected->lat, selected->lon, selected->name);
-#endif
+	#ifdef __EMSCRIPTEN__
+		EM_ASM({
+		    const lat = $0;
+		    const lon = $1;
+		    const city = UTF8ToString($2);
+		    sessionStorage.setItem(
+		        "rekav_weather_request",
+		        JSON.stringify({ latitude: lat, longitude: lon, city: city })
+		    );
+		    console.log("C -> JS weather request queued:", city, lat, lon);
+		}, selected->lat, selected->lon, selected->name);
+	#endif
 
     char buf[128];
-    snprintf(buf, sizeof(buf), "Fetching weather for %s…", selected->name);
     add_terminal_line(buf, LINE_FLAG_SYSTEM);
 }
 
@@ -483,7 +538,7 @@ void cmd_translate(const char *args) {
     _translation_pending = 1;
 
     if (!args || strlen(args) == 0) {
-        //add_line("Usage: translate <source> <target> <text>");
+        add_log("translate: no arguments provided", LOG_WARNING);
         return;
     }
 
@@ -491,33 +546,29 @@ void cmd_translate(const char *args) {
     char target[16];
     char text[256];
 
-    // Parse: source, target, rest of line
     if (sscanf(args, "%15s %15s %[^\n]", source, target, text) != 3) {
-        //add_line("Invalid usage! Example: translate en fr Hello world");
+        add_log("translate: invalid arguments format", LOG_ERROR);
         return;
     }
 
-	#ifdef __EMSCRIPTEN__
-		// Store translate request in sessionStorage for JS to process
-		EM_ASM({
-		    const source = UTF8ToString($0);
-		    const target = UTF8ToString($1);
-		    const text   = UTF8ToString($2);
+    char buf[512];
+    add_log(buf, LOG_INFO);
 
-		    sessionStorage.setItem(
-		        "rekav_translate_request",
-		        JSON.stringify({
-		            source: source,
-		            target: target,
-		            text: text
-		        })
-		    );
+    #ifdef __EMSCRIPTEN__
+        EM_ASM({
+            const source = UTF8ToString($0);
+            const target = UTF8ToString($1);
+            const text   = UTF8ToString($2);
 
-		    console.log("C -> JS translate request queued:", source, target, text);
-		}, source, target, text);
-	#endif
+            sessionStorage.setItem(
+                "rekav_translate_request",
+                JSON.stringify({source: source, target: target, text: text})
+            );
 
-    //add_line("Translating…");
+            console.log("C -> JS translate request queued:", source, target, text);
+        }, source, target, text);
+    #endif
 }
+
 
 

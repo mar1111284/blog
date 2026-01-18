@@ -127,6 +127,10 @@ const Theme *find_theme(const char *name);
 const Theme *get_theme_info(const char *theme_name);
 const NamedColor *find_color(const char *name);
 
+void list_themes(void);
+void list_colors(void);
+void print_settings_help(void);
+
 
 
 

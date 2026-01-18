@@ -132,6 +132,34 @@ ManEntry man_db[] = {
 		"--------------------------------------------------\n"
 		"\n"
 	},
+	{
+		"log",
+		"--------------------------------------------------\n"
+		"                      LOG                         \n"
+		"--------------------------------------------------\n\n"
+		"log [options]\n"
+		"  Displays or configures the terminal log system.\n\n"
+		"Usage:\n"
+		"  log [visible=0|1] [list]\n\n"
+		"Options:\n"
+		"  visible=1       Show log messages in the terminal when they are added.\n"
+		"  visible=0       Keep log messages in memory only (no terminal output).\n"
+		"  list            Display all stored log entries in the terminal.\n\n"
+		"Notes:\n"
+		"  - Log entries include a timestamp, type (INFO, WARN, ERROR, FATAL), an ID, and the message text.\n"
+		"  - You can combine options, e.g., 'log visible=1 list' to turn on logging and display current logs.\n"
+		"  - The terminal maintains a fixed-size log buffer (LOG_MAX_LINES), oldest entries are overwritten when full.\n\n"
+		"Examples:\n"
+		"  log visible=1          Enable terminal output for new logs.\n"
+		"  log visible=0          Disable terminal output for new logs.\n"
+		"  log list               Show all stored logs.\n"
+		"  log visible=1 list     Enable output and display current logs.\n\n"
+		"--------------------------------------------------\n"
+		"        Type 'log [options]' to manage logs       \n"
+		"--------------------------------------------------\n"
+		"\n"
+	},
+
 
 };
 

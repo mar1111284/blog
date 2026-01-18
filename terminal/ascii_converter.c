@@ -17,6 +17,25 @@ static SDL_Texture *pixel_art_texture = NULL;
 static SDL_Rect pixel_art_dst = {0};  // position & size
 ExportOptions global_opts = {0};
 
+void reset_export_options(ExportOptions *opts) {
+    if (!opts) return;
+
+    opts->chars_wide = 130;
+    opts->font_size  = 6;
+
+    opts->fg[0] = 255;
+    opts->fg[1] = 255;
+    opts->fg[2] = 255;
+
+    opts->bg[0] = 0;
+    opts->bg[1] = 0;
+    opts->bg[2] = 0;
+
+    opts->filename = "ascii_highres.png";
+    opts->ramp = RAMP_1;
+}
+
+
 static void mem_write_func(void *context, void *data, int size)
 {
     mem_writer_t *w = (mem_writer_t *)context;
@@ -36,7 +55,6 @@ void export_ascii(unsigned char *raw_data, int raw_size, ExportOptions opts) {
     add_terminal_line("\n", LINE_FLAG_NONE);
     add_terminal_line("export_ascii: starting ASCII PNG export...", LINE_FLAG_SYSTEM);
 
-    // ── Dump the full user options (opts) ───────────────────────────────────
     char buf[256];
     add_terminal_line("User options (opts):", LINE_FLAG_SYSTEM);
     snprintf(buf, sizeof(buf), "  chars_wide:   %d", opts.chars_wide);
@@ -50,7 +68,6 @@ void export_ascii(unsigned char *raw_data, int raw_size, ExportOptions opts) {
     snprintf(buf, sizeof(buf), "  filename:     %s", opts.filename ? opts.filename : "(null)");
     add_terminal_line(buf, LINE_FLAG_NONE);
 
-    // ── Input validation ────────────────────────────────────────────────────
     if (raw_size <= 0 || raw_size > 20 * 1024 * 1024) {
         add_terminal_line("export_ascii: invalid image size", LINE_FLAG_ERROR);
         return;
@@ -64,7 +81,6 @@ void export_ascii(unsigned char *raw_data, int raw_size, ExportOptions opts) {
     }
     add_terminal_line("Image loaded OK", LINE_FLAG_SYSTEM);
 
-    // ── Target dimensions with safe fallbacks ───────────────────────────────
     int target_width = opts.chars_wide;
     if (target_width <= 0 || target_width > 500) {
         target_width = 80;  // sane default
@@ -83,7 +99,6 @@ void export_ascii(unsigned char *raw_data, int raw_size, ExportOptions opts) {
     snprintf(buf, sizeof(buf), "Target dimensions: %d chars wide × %d chars high", target_width, target_height);
     add_terminal_line(buf, LINE_FLAG_NONE);
 
-    // ── ASCII buffer & dithering ────────────────────────────────────────────
     const char *ramp = opts.ramp;
     int ramp_len = strlen(ramp);
 
@@ -107,7 +122,6 @@ void export_ascii(unsigned char *raw_data, int raw_size, ExportOptions opts) {
         return;
     }
 
-    // Dithering loop (unchanged)
     for (int y = 0; y < target_height; y++) {
         for (int x = 0; x < target_width; x++) {
             int sx = (x * width) / target_width;
@@ -142,7 +156,6 @@ void export_ascii(unsigned char *raw_data, int raw_size, ExportOptions opts) {
 
     add_terminal_line("ASCII art generated OK", LINE_FLAG_SYSTEM);
 
-    // ── Font & surface ──────────────────────────────────────────────────────
     if (TTF_WasInit() == 0) TTF_Init();
     TTF_Font *font = TTF_OpenFont(FONT_PATH, opts.font_size);
     if (!font) {
@@ -191,7 +204,6 @@ void export_ascii(unsigned char *raw_data, int raw_size, ExportOptions opts) {
 
     SDL_FillRect(final_surf, NULL, SDL_MapRGBA(final_surf->format, opts.bg[0], opts.bg[1], opts.bg[2], 255));
 
-    // ── Render loop (unchanged) ─────────────────────────────────────────────
     int y_offset = 0;
     char *line = ascii;
     while (*line) {
@@ -216,7 +228,6 @@ void export_ascii(unsigned char *raw_data, int raw_size, ExportOptions opts) {
 
     add_terminal_line("Text rendered to surface OK", LINE_FLAG_SYSTEM);
 
-    // ── PNG write (unchanged except for safety) ─────────────────────────────
     mem_writer_t writer = {0};
     writer.buf = malloc(MAX_PNG_SIZE);
     writer.size = 0;
@@ -287,7 +298,9 @@ void process_image_to_pixels(unsigned char *raw_data, int raw_size) {
     snprintf(info, sizeof(info), "Image decoded: %d × %d (%d ch)", width, height, channels);
     add_terminal_line(info, LINE_FLAG_SYSTEM);
 
-    int target_width = 130;
+    int target_width = global_opts.chars_wide ? global_opts.chars_wide : 130;
+    int font_size = global_opts.font_size ? global_opts.font_size : 8;
+    if(font_size >= 9) font_size = 9;
     const float char_aspect = 2.2f;
     int target_height = (int)((float)(height * target_width) / (float)width / char_aspect);
 
@@ -296,7 +309,7 @@ void process_image_to_pixels(unsigned char *raw_data, int raw_size) {
     add_terminal_line(size_dbg, LINE_FLAG_SYSTEM);
     add_terminal_line("\n", LINE_FLAG_NONE);
 
-    const char *ramp = RAMP_1;
+    const char *ramp = global_opts.ramp ? global_opts.ramp : RAMP_1;
     int ramp_len = strlen(ramp);
 
     size_t buf_size = (target_width + 1LL) * target_height + 1;
@@ -343,7 +356,7 @@ void process_image_to_pixels(unsigned char *raw_data, int raw_size) {
     char line_buf[1024];
     int printed = 0;
     int prev_font_size = _terminal.settings.font_size;
-    set_font_size(&_terminal.settings, 8);
+    set_font_size(&_terminal.settings, font_size);
 
     while (*p) {
         char *nl = strchr(p, '\n');

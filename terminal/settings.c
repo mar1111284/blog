@@ -152,7 +152,55 @@ static const Theme predefined_themes[] = {
     }
 };
 
+void print_settings_help(void) {
+    const char *lines[] = {
+        "",
+        "--------------------------------------------------",
+        "                   SETTINGS                       ",
+        "--------------------------------------------------",
+        "",
+        "Usage: settings <option> <value> --flags",
+        "",
+        "Options:",
+        "  bg           - Background color (charcoal, dos_blue, pink, green, red)",
+        "  font_color   - Font color (white, green, pink, red, orange)",
+        "  font_size    - Font size (10-20)",
+        "  line_height  - Line height (15-25)",
+        "  theme        - Predefined themes (default, msdos, barbie, jurassic, inferno)",
+        "",
+        "--------------------------------------------------",
+        "       Example: settings bg charcoal            ",
+        "--------------------------------------------------",
+        ""
+    };
+
+    for (int i = 0; i < sizeof(lines) / sizeof(lines[0]); i++) {
+        // Use SYSTEM flag for usage/headers, NONE for blanks can be refined
+        int flag = (lines[i][0] == '\0') ? LINE_FLAG_NONE : LINE_FLAG_SYSTEM;
+        add_terminal_line(lines[i], flag);
+    }
+}
+
+
 static const int PREDEFINED_THEME_COUNT = sizeof(predefined_themes) / sizeof(predefined_themes[0]);
+
+void list_themes(void) {
+    add_terminal_line("", LINE_FLAG_NONE);
+    add_terminal_line("Available themes:", LINE_FLAG_SYSTEM);
+
+    for (int i = 0; i < PREDEFINED_THEME_COUNT; i++) {
+        add_terminal_line(predefined_themes[i].name, LINE_FLAG_NONE);
+    }
+}
+
+void list_colors(void) {
+    add_terminal_line("", LINE_FLAG_NONE);
+    add_terminal_line("Available colors:", LINE_FLAG_SYSTEM);
+
+    for (int i = 0; predefined_colors[i].name != NULL; i++) {
+        add_terminal_line(predefined_colors[i].name, LINE_FLAG_NONE);
+    }
+}
 
 const Theme *get_theme_info(const char *name) {
     if (!name) return NULL;
@@ -287,7 +335,7 @@ int set_font_color(TerminalSettings *s, const char *name) {
 }
 
 int set_font_size(TerminalSettings *s, int size) {
-    if (!s || size < 7 || size > 20) return 0;
+    if (!s || size < 5 || size > 30) return 0;
 
     if (s->font) {
         TTF_CloseFont(s->font);
