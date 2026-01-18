@@ -17,6 +17,14 @@
 #include "translate.h"
 #include "forecast.h"
 
+const VersionInfo VERSION_INFO = {
+    .app = "1.0",
+    .terminal = "1.0",
+    .weather_forecast = "1.0",
+    .ascii_converter = "1.0",
+    .translator = "1.0",
+};
+
 AppContext app = {ZERO_MEMORY};
 
 void queue_image_request(const char *url) {
@@ -585,11 +593,10 @@ int is_at_bottom() {
     return _terminal.scroll_offset_px >= _terminal.max_scroll - 20; // small tolerance
 }
 
-// Returns true if we handled history navigation
 static bool handle_history_navigation(SDL_Keycode key)
 {
     if (_awaiting_sudo_password) {
-        return false; // Don't mess with password input
+        return false;
     }
 
     if (_terminal.history.count == 0) {
@@ -627,10 +634,8 @@ static bool handle_history_navigation(SDL_Keycode key)
     if (cmd) {
         size_t prompt_len = _terminal.input.prompt_len;
         size_t max_after_prompt = INPUT_MAX_CHARS - prompt_len - 1;
-
         strncpy(_terminal.input.buffer + prompt_len, cmd, max_after_prompt);
         _terminal.input.buffer[INPUT_MAX_CHARS - 1] = '\0'; // safety
-
         _terminal.input.cursor_pos = strlen(_terminal.input.buffer);
         _terminal.input.dirty = TRUE;
     }
@@ -756,7 +761,7 @@ void main_loop() {
     }
     
     //poll_translate_result();
-	//poll_forecast_result();
+	poll_forecast_result();
 	poll_image_result();
 }
 

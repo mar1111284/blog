@@ -20,6 +20,7 @@ extern Command commands[];
 extern int command_count;
 
 // Command implementations
+void cmd_version(const char *args);
 void cmd_help(const char *args);
 void cmd_clear(const char *args);
 void cmd_echo(const char *args);

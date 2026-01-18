@@ -67,6 +67,15 @@
 #define _last_activity      app.last_activity
 #define _history            app.terminal.history
 
+typedef struct {
+    const char *app;
+    const char *terminal;
+    const char *weather_forecast;
+    const char *ascii_converter;
+    const char *translator;
+} VersionInfo;
+
+extern const VersionInfo VERSION_INFO;
 
 typedef enum {
     FAST  = 16,

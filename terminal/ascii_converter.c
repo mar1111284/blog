@@ -15,53 +15,99 @@
 
 static SDL_Texture *pixel_art_texture = NULL;
 static SDL_Rect pixel_art_dst = {0};  // position & size
-static ExportOptions global_opts = {0};
+ExportOptions global_opts = {0};
 
-void mem_write_func(void *context, void *data, int size) {
+static void mem_write_func(void *context, void *data, int size)
+{
     mem_writer_t *w = (mem_writer_t *)context;
-    if (w->size + size > w->capacity) return;
-    memcpy(w->buf + w->size, data, size);
-    w->size += size;
+    if (size <= 0) return;
+    size_t needed = w->size + (size_t)size;
+    if (needed > w->capacity) {
+        char log[128];
+        snprintf(log, sizeof(log), "mem_write_func: overflow (need %zu, have %zu)", needed, w->capacity);
+        add_terminal_line(log, LINE_FLAG_ERROR);
+        return;
+    }
+    memcpy(w->buf + w->size, data, (size_t)size);
+    w->size += (size_t)size;
 }
 
 void export_ascii(unsigned char *raw_data, int raw_size, ExportOptions opts) {
+    add_terminal_line("\n", LINE_FLAG_NONE);
     add_terminal_line("export_ascii: starting ASCII PNG export...", LINE_FLAG_SYSTEM);
 
+    // ── Dump the full user options (opts) ───────────────────────────────────
+    char buf[256];
+    add_terminal_line("User options (opts):", LINE_FLAG_SYSTEM);
+    snprintf(buf, sizeof(buf), "  chars_wide:   %d", opts.chars_wide);
+    add_terminal_line(buf, LINE_FLAG_NONE);
+    snprintf(buf, sizeof(buf), "  font_size:    %d", opts.font_size);
+    add_terminal_line(buf, LINE_FLAG_NONE);
+    snprintf(buf, sizeof(buf), "  bg color:     (%d,%d,%d,%d)", opts.bg[0], opts.bg[1], opts.bg[2], 255);
+    add_terminal_line(buf, LINE_FLAG_NONE);
+    snprintf(buf, sizeof(buf), "  fg color:     (%d,%d,%d,%d)", opts.fg[0], opts.fg[1], opts.fg[2], 255);
+    add_terminal_line(buf, LINE_FLAG_NONE);
+    snprintf(buf, sizeof(buf), "  filename:     %s", opts.filename ? opts.filename : "(null)");
+    add_terminal_line(buf, LINE_FLAG_NONE);
+
+    // ── Input validation ────────────────────────────────────────────────────
     if (raw_size <= 0 || raw_size > 20 * 1024 * 1024) {
-    	add_terminal_line("export_ascii: invalid image size", LINE_FLAG_ERROR);
+        add_terminal_line("export_ascii: invalid image size", LINE_FLAG_ERROR);
         return;
     }
 
     int width, height, channels;
     unsigned char *pixels = stbi_load_from_memory(raw_data, raw_size, &width, &height, &channels, 4);
     if (!pixels) {
-    	add_terminal_line("export_ascii: decode failed", LINE_FLAG_ERROR);
+        add_terminal_line("export_ascii: stbi_load_from_memory failed", LINE_FLAG_ERROR);
         return;
     }
+    add_terminal_line("Image loaded OK", LINE_FLAG_SYSTEM);
 
-    // --- Settings ---
+    // ── Target dimensions with safe fallbacks ───────────────────────────────
     int target_width = opts.chars_wide;
+    if (target_width <= 0 || target_width > 500) {
+        target_width = 80;  // sane default
+        snprintf(buf, sizeof(buf), "Warning: invalid chars_wide (%d) → using default %d", opts.chars_wide, target_width);
+        add_terminal_line(buf, LINE_FLAG_SYSTEM);
+    }
+
     const float char_aspect = 2.2f;
     int target_height = (int)((float)(height * target_width) / (float)width / char_aspect);
+    if (target_height <= 0 || target_height > 1000) {
+        target_height = 50;  // sane default
+        snprintf(buf, sizeof(buf), "Warning: target_height invalid (%d) → using default %d", target_height, 50);
+        add_terminal_line(buf, LINE_FLAG_SYSTEM);
+    }
 
-    const char *ramp = " .'`^\",:;Il!i~+_-?][}{1)(|\\/*tfjrxnuvczXYUJCLQ0OZmwqpdbkhao*#MW&8%B@$";
+    snprintf(buf, sizeof(buf), "Target dimensions: %d chars wide × %d chars high", target_width, target_height);
+    add_terminal_line(buf, LINE_FLAG_NONE);
+
+    // ── ASCII buffer & dithering ────────────────────────────────────────────
+    const char *ramp = opts.ramp;
     int ramp_len = strlen(ramp);
 
-    // --- Allocate ASCII buffer ---
     size_t buf_size = (target_width + 1LL) * target_height + 1;
     char *ascii = (char *)malloc(buf_size);
     if (!ascii) {
-        //add_line("export_ascii: cannot allocate ASCII buffer");
+        add_terminal_line("malloc failed for ASCII buffer", LINE_FLAG_ERROR);
         stbi_image_free(pixels);
         return;
     }
     char *p = ascii;
 
-    // --- Dithering arrays ---
     float *error = (float *)calloc(target_width + 4, sizeof(float));
     float *next_row = (float *)calloc(target_width + 4, sizeof(float));
+    if (!error || !next_row) {
+        add_terminal_line("malloc failed for dithering arrays", LINE_FLAG_ERROR);
+        free(ascii);
+        if (error) free(error);
+        if (next_row) free(next_row);
+        stbi_image_free(pixels);
+        return;
+    }
 
-    // --- ASCII conversion ---
+    // Dithering loop (unchanged)
     for (int y = 0; y < target_height; y++) {
         for (int x = 0; x < target_width; x++) {
             int sx = (x * width) / target_width;
@@ -81,10 +127,10 @@ void export_ascii(unsigned char *raw_data, int raw_size, ExportOptions opts) {
             *p++ = ramp[idx];
 
             float quant_error = gray - (idx * 255.0f / (ramp_len-1));
-            error[x+1]      += quant_error * 7.0f/16.0f;    // right
-            next_row[x]      += quant_error * 3.0f/16.0f;    // below-left
-            next_row[x+1]    += quant_error * 5.0f/16.0f;    // below
-            next_row[x+2]    += quant_error * 1.0f/16.0f;    // below-right
+            error[x+1]      += quant_error * 7.0f/16.0f;
+            next_row[x]      += quant_error * 3.0f/16.0f;
+            next_row[x+1]    += quant_error * 5.0f/16.0f;
+            next_row[x+2]    += quant_error * 1.0f/16.0f;
         }
         *p++ = '\n';
         memcpy(error, next_row, (target_width+4)*sizeof(float));
@@ -94,17 +140,18 @@ void export_ascii(unsigned char *raw_data, int raw_size, ExportOptions opts) {
     free(next_row);
     *p = '\0';
 
-    // --- Initialize TTF and surface ---
+    add_terminal_line("ASCII art generated OK", LINE_FLAG_SYSTEM);
+
+    // ── Font & surface ──────────────────────────────────────────────────────
     if (TTF_WasInit() == 0) TTF_Init();
-    char font_path[256];
-    snprintf(font_path, sizeof(font_path), "font.ttf"); // adjust font
-    TTF_Font *font = TTF_OpenFont(font_path, opts.font_size);
+    TTF_Font *font = TTF_OpenFont(FONT_PATH, opts.font_size);
     if (!font) {
-        //add_line("export_ascii: failed to load font");
+        add_terminal_line("export_ascii: failed to load font", LINE_FLAG_ERROR);
         free(ascii);
         stbi_image_free(pixels);
         return;
     }
+    add_terminal_line("Font opened OK", LINE_FLAG_SYSTEM);
 
     int char_width, char_height;
     TTF_SizeUTF8(font, "A", &char_width, NULL);
@@ -113,10 +160,38 @@ void export_ascii(unsigned char *raw_data, int raw_size, ExportOptions opts) {
     int img_width  = target_width * char_width;
     int img_height = target_height * char_height;
 
+    if (img_width <= 0 || img_height <= 0) {
+        add_terminal_line("Error: invalid final image dimensions (w/h <= 0)", LINE_FLAG_ERROR);
+        TTF_CloseFont(font);
+        free(ascii);
+        stbi_image_free(pixels);
+        return;
+    }
+
+    snprintf(buf, sizeof(buf), "Creating surface: %d × %d pixels", img_width, img_height);
+    add_terminal_line(buf, LINE_FLAG_NONE);
+
     SDL_Surface *final_surf = SDL_CreateRGBSurfaceWithFormat(0, img_width, img_height, 32, SDL_PIXELFORMAT_RGBA32);
+    if (!final_surf) {
+        add_terminal_line("SDL_CreateRGBSurfaceWithFormat failed", LINE_FLAG_ERROR);
+        TTF_CloseFont(font);
+        free(ascii);
+        stbi_image_free(pixels);
+        return;
+    }
+
+    if (final_surf->pixels == NULL || final_surf->pitch <= 0) {
+        add_terminal_line("Error: final_surf is empty or invalid (pixels NULL or pitch <=0)", LINE_FLAG_ERROR);
+        SDL_FreeSurface(final_surf);
+        TTF_CloseFont(font);
+        free(ascii);
+        stbi_image_free(pixels);
+        return;
+    }
+
     SDL_FillRect(final_surf, NULL, SDL_MapRGBA(final_surf->format, opts.bg[0], opts.bg[1], opts.bg[2], 255));
 
-    // --- Render ASCII onto surface ---
+    // ── Render loop (unchanged) ─────────────────────────────────────────────
     int y_offset = 0;
     char *line = ascii;
     while (*line) {
@@ -139,35 +214,57 @@ void export_ascii(unsigned char *raw_data, int raw_size, ExportOptions opts) {
         line = (*nl) ? nl+1 : nl;
     }
 
+    add_terminal_line("Text rendered to surface OK", LINE_FLAG_SYSTEM);
+
+    // ── PNG write (unchanged except for safety) ─────────────────────────────
+    mem_writer_t writer = {0};
+    writer.buf = malloc(MAX_PNG_SIZE);
+    writer.size = 0;
+    writer.capacity = MAX_PNG_SIZE;
+    if (!writer.buf) {
+        add_terminal_line("malloc for PNG buffer failed", LINE_FLAG_ERROR);
+        SDL_FreeSurface(final_surf);
+        TTF_CloseFont(font);
+        free(ascii);
+        stbi_image_free(pixels);
+        return;
+    }
+
+    int write_result = stbi_write_png_to_func(mem_write_func, &writer, final_surf->w, final_surf->h, 4, final_surf->pixels, final_surf->pitch);
+
+    if (write_result == 0) {
+        add_terminal_line("stbi_write_png_to_func FAILED", LINE_FLAG_ERROR);
+    } else {
+        snprintf(buf, sizeof(buf), "PNG written OK, size: %zu bytes", writer.size);
+        add_terminal_line(buf, LINE_FLAG_SYSTEM);
+    }
+
+    SDL_FreeSurface(final_surf);
     TTF_CloseFont(font);
     free(ascii);
     stbi_image_free(pixels);
 
-    // --- Write PNG to memory ---
-    mem_writer_t writer;
-    writer.buf = malloc(MAX_PNG_SIZE);
-    writer.size = 0;
-    writer.capacity = MAX_PNG_SIZE;
-    stbi_write_png_to_func(mem_write_func, &writer, final_surf->w, final_surf->h, 4, final_surf->pixels, final_surf->pitch);
-    SDL_FreeSurface(final_surf);
+    if (writer.size > 0) {
+        EM_ASM_({
+            const dataPtr = $0;
+            const dataLen = $1;
+            const filename = UTF8ToString($2);
+            const bytes = new Uint8Array(Module.HEAPU8.buffer, dataPtr, dataLen);
+            const blob = new Blob([bytes], {type:"image/png"});
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = filename;
+            a.click();
+            URL.revokeObjectURL(url);
+        }, writer.buf, writer.size, opts.filename);
 
-    // --- Trigger download ---
-    EM_ASM_({
-        const dataPtr = $0;
-        const dataLen = $1;
-        const filename = UTF8ToString($2);
-        const bytes = new Uint8Array(Module.HEAPU8.buffer, dataPtr, dataLen);
-        const blob = new Blob([bytes], {type:"image/png"});
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = filename;
-        a.click();
-        URL.revokeObjectURL(url);
-    }, writer.buf, (int)writer.size, opts.filename);
+        add_terminal_line("PNG download triggered!", LINE_FLAG_SYSTEM);
+    } else {
+        add_terminal_line("No data written to PNG - download skipped", LINE_FLAG_ERROR);
+    }
 
     free(writer.buf);
-    //add_line("export_ascii: PNG download triggered!");
 }
 
 void process_image_to_pixels(unsigned char *raw_data, int raw_size) {
@@ -360,6 +457,7 @@ int poll_image_result(void) {
     process_image_to_pixels(image_raw, decoded_bytes);
 
     if (_image_download_pending) {
+    	add_terminal_line("call export Ascii", LINE_FLAG_SYSTEM);
         export_ascii(image_raw, decoded_bytes, global_opts);
         _image_download_pending = 0;
     }

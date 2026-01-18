@@ -31,6 +31,7 @@ Command commands[] = {
     {"man",  "Display documentation",          cmd_man},
     {"to_ascii", "Convert image from URL to ASCII art", cmd_to_ascii},
     {"debug", "App debug dump",app_debug_dump },
+    {"version", "Version",cmd_version },
 
 };
 
@@ -62,6 +63,41 @@ void execute_command(const char *cmd) {
     add_terminal_line("Unknown command. Type 'help'", LINE_FLAG_SYSTEM);
 }
 
+void cmd_version(const char *args) {
+
+    add_terminal_line("", LINE_FLAG_NONE);
+    add_terminal_line("--------------------------------------------------", LINE_FLAG_NONE);
+    add_terminal_line("                    VERSION                       ", LINE_FLAG_NONE);
+    add_terminal_line("--------------------------------------------------", LINE_FLAG_NONE);
+    add_terminal_line("", LINE_FLAG_NONE);
+
+    add_terminal_line("Components:", LINE_FLAG_NONE);
+
+    char buf[128];
+
+    snprintf(buf, sizeof(buf), "  App               : %s", VERSION_INFO.app);
+    add_terminal_line(buf, LINE_FLAG_NONE);
+
+    snprintf(buf, sizeof(buf), "  Terminal          : %s", VERSION_INFO.terminal);
+    add_terminal_line(buf, LINE_FLAG_NONE);
+
+    snprintf(buf, sizeof(buf), "  Weather Forecast  : %s", VERSION_INFO.weather_forecast);
+    add_terminal_line(buf, LINE_FLAG_NONE);
+
+    snprintf(buf, sizeof(buf), "  ASCII Converter   : %s", VERSION_INFO.ascii_converter);
+    add_terminal_line(buf, LINE_FLAG_NONE);
+
+    snprintf(buf, sizeof(buf), "  Translator        : %s", VERSION_INFO.translator);
+    add_terminal_line(buf, LINE_FLAG_NONE);
+
+    add_terminal_line("", LINE_FLAG_NONE);
+    add_terminal_line("--------------------------------------------------", LINE_FLAG_NONE);
+    add_terminal_line("            Type 'help' to see commands           ", LINE_FLAG_NONE);
+    add_terminal_line("--------------------------------------------------", LINE_FLAG_NONE);
+    add_terminal_line("", LINE_FLAG_NONE);
+}
+
+
 void cmd_help(const char *args) {
 
     add_terminal_line("", LINE_FLAG_NONE);
@@ -72,6 +108,7 @@ void cmd_help(const char *args) {
 
     add_terminal_line("Commands:", LINE_FLAG_NONE);
     add_terminal_line("  help                         - Show this help message", LINE_FLAG_NONE);
+    add_terminal_line("  version                      - Show application version info", LINE_FLAG_NONE);
     add_terminal_line("  clear                        - Clear terminal output", LINE_FLAG_NONE);
     add_terminal_line("  open <page>                  - Open a page in a new tab", LINE_FLAG_NONE);
     add_terminal_line("  ls                           - List available pages and files", LINE_FLAG_NONE);
@@ -81,15 +118,15 @@ void cmd_help(const char *args) {
     add_terminal_line("  translate <src> <tgt> <text> - Translate text via MyMemory API", LINE_FLAG_NONE);
     add_terminal_line("  man <command>                - Show command documentation", LINE_FLAG_NONE);
     add_terminal_line("  to_ascii <link>              - Convert image to ASCII", LINE_FLAG_NONE);
-    add_terminal_line("  debug             			  - Get App context dump (dev)", LINE_FLAG_NONE);
+    add_terminal_line("  debug                        - Get App context dump (dev)", LINE_FLAG_NONE);
 
     add_terminal_line("", LINE_FLAG_NONE);
     add_terminal_line("--------------------------------------------------", LINE_FLAG_NONE);
     add_terminal_line("        Type 'man <command>' for more info       ", LINE_FLAG_NONE);
     add_terminal_line("--------------------------------------------------", LINE_FLAG_NONE);
     add_terminal_line("", LINE_FLAG_NONE);
-
 }
+
 
 void cmd_clear(const char *args) {
     clear_terminal();
@@ -326,7 +363,7 @@ void cmd_to_ascii(const char *args) {
     _image_processing_pending = 1;
 
     if (!args || strlen(args) == 0) {
-        add_terminal_line("Usage: to_ascii <image_url> [download=1 wide=300 font_size=6 bg=black color=white name=output]", LINE_FLAG_SYSTEM);
+        add_terminal_line("Usage: to_ascii <image_url> [download=1 wide=300 font_size=6 bg=black color=white name=output ramp=1]", LINE_FLAG_SYSTEM);
         _image_processing_pending = 0;
         return;
     }
@@ -366,6 +403,13 @@ void cmd_to_ascii(const char *args) {
                 parse_color(val, &opts.fg[0], &opts.fg[1], &opts.fg[2]);
             } else if (strcmp(key, "name") == 0) {
                 opts.filename = strdup(val);
+            } else if (strcmp(key, "ramp") == 0) {
+                int r = atoi(val);
+                if      (r == 1) opts.ramp = RAMP_1;
+                else if (r == 2) opts.ramp = RAMP_2;
+                else if (r == 3) opts.ramp = RAMP_3;
+                else if (r == 4) opts.ramp = RAMP_4;
+                else             opts.ramp = RAMP_1;
             }
         }
 
@@ -392,52 +436,48 @@ void cmd_to_ascii(const char *args) {
 }
 
 
-
 void cmd_weather(const char *args) {
     _weather_forecast_pending = 1;
-    /*if (!args || strlen(args) == 0) {
-        add_line("Usage: weather <city>");
-        add_line("Available cities:");
+
+    if (!args || strlen(args) == 0) {
+        add_terminal_line("Usage: weather <city>", LINE_FLAG_SYSTEM);
+        add_terminal_line("Available cities:", LINE_FLAG_SYSTEM);
         for (int i = 0; i < city_count; i++) {
-            add_line(cities[i].name);
+            add_terminal_line(cities[i].name, LINE_FLAG_NONE);
         }
         return;
-    }*/
+    }
 
-    // Find city in array (case-insensitive)
     City *selected = NULL;
     for (int i = 0; i < city_count; i++) {
-        if (strcasecmp(args, cities[i].name) == 0) { // <-- case-insensitive
+        if (strcasecmp(args, cities[i].name) == 0) {
             selected = &cities[i];
             break;
         }
     }
 
     if (!selected) {
-        //add_line("City not found. Type 'weather' to see available cities.");
         return;
     }
 
-	#ifdef __EMSCRIPTEN__
-		EM_ASM({
-		    const lat = $0;
-		    const lon = $1;
-		    const city = UTF8ToString($2);
-
-		    // Store request in sessionStorage for JS to process
-		    sessionStorage.setItem(
-		        "rekav_weather_request",
-		        JSON.stringify({latitude: lat, longitude: lon, city: city})
-		    );
-
-		    console.log("C -> JS weather request queued:", city, lat, lon);
-		}, selected->lat, selected->lon, selected->name);
-	#endif
+#ifdef __EMSCRIPTEN__
+    EM_ASM({
+        const lat = $0;
+        const lon = $1;
+        const city = UTF8ToString($2);
+        sessionStorage.setItem(
+            "rekav_weather_request",
+            JSON.stringify({ latitude: lat, longitude: lon, city: city })
+        );
+        console.log("C -> JS weather request queued:", city, lat, lon);
+    }, selected->lat, selected->lon, selected->name);
+#endif
 
     char buf[128];
     snprintf(buf, sizeof(buf), "Fetching weather for %s…", selected->name);
-    //add_line(buf);
+    add_terminal_line(buf, LINE_FLAG_SYSTEM);
 }
+
 
 void cmd_translate(const char *args) {
     _translation_pending = 1;
