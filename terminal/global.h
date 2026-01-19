@@ -1,6 +1,7 @@
 #ifndef GLOBAL_H
 #define GLOBAL_H
 
+#include "editor.h"
 #include "settings.h"
 #include "sdl.h"
 
@@ -16,8 +17,8 @@
 
 // TERMINAL DIMENSIONS
 #define DESKTOP_WIDTH        800
-#define MIN_DESKTOP_WIDTH    490
 #define DESKTOP_HEIGHT       400
+#define MIN_DESKTOP_WIDTH    490
 
 // TERMINAL PADDING
 #define TERMINAL_PADDING_LEFT    10
@@ -69,6 +70,10 @@
 #define _image_download_pending      app.image_download_pending
 #define _last_activity      app.last_activity
 #define _history            app.terminal.history
+#define _editor             _terminal.editor
+#define _editor_active      _terminal.editor_active
+
+typedef struct Editor Editor;   // forward decl
 
 typedef struct {
     const char *version;
@@ -81,6 +86,7 @@ typedef struct {
     ComponentVersion weather_forecast;
     ComponentVersion ascii_converter;
     ComponentVersion translator;
+    ComponentVersion editor;
 } VersionInfo;
 
 typedef enum {
@@ -123,12 +129,19 @@ typedef struct AppConfig {
 } AppConfig;
 
 typedef enum {
-    LINE_FLAG_NONE      = 0,
-    LINE_FLAG_PROMPT    = 1 << 0,
-    LINE_FLAG_ERROR     = 1 << 1,
-    LINE_FLAG_SYSTEM    = 1 << 2,
-    LINE_FLAG_HIGHLIGHT = 1 << 3,
-    LINE_FLAG_WARNING = 1 << 4
+    LINE_FLAG_NONE       = 0,
+
+    LINE_FLAG_PROMPT     = 1 << 0,
+    LINE_FLAG_ERROR      = 1 << 1,
+    LINE_FLAG_SYSTEM     = 1 << 2,
+    LINE_FLAG_HIGHLIGHT  = 1 << 3,
+    LINE_FLAG_WARNING    = 1 << 4,
+
+    LINE_FLAG_BOLD       = 1 << 8,    
+    LINE_FLAG_ITALIC     = 1 << 9,     
+    LINE_FLAG_UNDERLINE  = 1 << 10,   
+    LINE_FLAG_STRIKE     = 1 << 11 
+
 } TerminalLineFlags;
 
 typedef struct TerminalLine {
@@ -156,8 +169,9 @@ typedef struct Terminal {
     int scroll_offset_px;
     int max_scroll;
     BOOL dirty;
-
-    // ── NEW: current input state ───────────────────────────────
+    Editor editor;
+    BOOL editor_active; // true when editor is open
+     
     struct {
         char buffer[INPUT_MAX_CHARS];       // includes prompt + user text
         int cursor_pos;                     // byte index (0 = right after prompt)
@@ -179,6 +193,9 @@ typedef struct Terminal {
     int next_log_id;
     RENDER_TICK tick_rate;
     bool log_visible;
+    
+    // Thick Perf.
+    Uint32 last_tick;
     
 } Terminal;
 
@@ -212,7 +229,6 @@ extern AppContext app;
 // App
 void app_init(void);
 void app_cleanup(void);
-void app_debug_dump(const char *arg);
 
 // Render & update
 void render_terminal(void);

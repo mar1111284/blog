@@ -68,7 +68,7 @@ var ENVIRONMENT_IS_SHELL = false;
 
 // --pre-jses are emitted after the Module integration code, so that they can
 // refer to Module (if they choose; they can also define Module)
-// include: /tmp/tmplj69dm_2.js
+// include: /tmp/tmpqko7wwnf.js
 if (!Module["expectedDataFileDownloads"]) Module["expectedDataFileDownloads"] = 0;
 
 Module["expectedDataFileDownloads"]++;
@@ -199,35 +199,31 @@ Module["expectedDataFileDownloads"]++;
       "start": 2098390,
       "end": 2098676
     }, {
-      "filename": "/manifesto.txt",
-      "start": 2098676,
-      "end": 2099912
-    }, {
       "filename": "/welcome.txt",
-      "start": 2099912,
-      "end": 2100184
+      "start": 2098676,
+      "end": 2098948
     } ],
-    "remote_package_size": 2100184
+    "remote_package_size": 2098948
   });
 })();
 
-// end include: /tmp/tmplj69dm_2.js
-// include: /tmp/tmp9b992tme.js
+// end include: /tmp/tmpqko7wwnf.js
+// include: /tmp/tmp_2d7oa95.js
 // All the pre-js content up to here must remain later on, we need to run
 // it.
 if ((typeof ENVIRONMENT_IS_WASM_WORKER != "undefined" && ENVIRONMENT_IS_WASM_WORKER) || (typeof ENVIRONMENT_IS_PTHREAD != "undefined" && ENVIRONMENT_IS_PTHREAD) || (typeof ENVIRONMENT_IS_AUDIO_WORKLET != "undefined" && ENVIRONMENT_IS_AUDIO_WORKLET)) Module["preRun"] = [];
 
 var necessaryPreJSTasks = Module["preRun"].slice();
 
-// end include: /tmp/tmp9b992tme.js
-// include: /tmp/tmpxg0qsvrc.js
+// end include: /tmp/tmp_2d7oa95.js
+// include: /tmp/tmptl3czkts.js
 if (!Module["preRun"]) throw "Module.preRun should exist because file support used it; did a pre-js delete it?";
 
 necessaryPreJSTasks.forEach(task => {
   if (Module["preRun"].indexOf(task) < 0) throw "All preRun tasks that exist before user pre-js code should remain after; did you replace Module or modify Module.preRun?";
 });
 
-// end include: /tmp/tmpxg0qsvrc.js
+// end include: /tmp/tmptl3czkts.js
 var arguments_ = [];
 
 var thisProgram = "./this.program";
@@ -10057,9 +10053,9 @@ function checkIncomingModuleAPI() {
 }
 
 var ASM_CONSTS = {
-  1383256: () => window.innerWidth,
-  1383286: () => window.innerHeight,
-  1383317: $0 => {
+  1384381: () => window.innerWidth,
+  1384411: () => window.innerHeight,
+  1384442: $0 => {
     let hist = Module.history_array || [];
     let cmd = UTF8ToString($0);
     hist.push(cmd);
@@ -10067,13 +10063,13 @@ var ASM_CONSTS = {
     Module.history_array = hist;
     sessionStorage.setItem("rekav_history", JSON.stringify(hist));
   },
-  1383532: ($0, $1) => {
+  1384657: ($0, $1) => {
     const key = UTF8ToString($1);
     const value = UTF8ToString($0);
     sessionStorage.setItem(key, value);
     console.log("SessionStorage set:", key, value);
   },
-  1383682: () => {
+  1384807: () => {
     try {
       let canvas = Module["canvas"];
       if (!document.fullscreenElement) {
@@ -10085,7 +10081,7 @@ var ASM_CONSTS = {
       console.error("Fullscreen toggle error:", e);
     }
   },
-  1383885: $0 => {
+  1385010: $0 => {
     try {
       var page = UTF8ToString($0);
       window.open("/" + page + ".html", "_blank");
@@ -10093,12 +10089,12 @@ var ASM_CONSTS = {
       console.error("cmd_open JS error:", e);
     }
   },
-  1384024: $0 => {
+  1385149: $0 => {
     const url = UTF8ToString($0);
     sessionStorage.setItem("rekav_image_request", url);
     console.log("C -> JS image request queued:", url);
   },
-  1384161: ($0, $1, $2) => {
+  1385286: ($0, $1, $2) => {
     const lat = $0;
     const lon = $1;
     const city = UTF8ToString($2);
@@ -10109,7 +10105,7 @@ var ASM_CONSTS = {
     }));
     console.log("C -> JS weather request queued:", city, lat, lon);
   },
-  1384406: ($0, $1, $2) => {
+  1385531: ($0, $1, $2) => {
     const source = UTF8ToString($0);
     const target = UTF8ToString($1);
     const text = UTF8ToString($2);
@@ -10120,7 +10116,15 @@ var ASM_CONSTS = {
     }));
     console.log("C -> JS translate request queued:", source, target, text);
   },
-  1384694: ($0, $1, $2) => {
+  1385819: () => {
+    if (Module.canvas) {
+      Module.canvas.style.imageRendering = "pixelated";
+      Module.canvas.style.imageRendering = "-moz-crisp-edges";
+      Module.canvas.style.imageRendering = "-webkit-optimize-contrast";
+      Module.canvas.style.imageRendering = "crisp-edges";
+    }
+  },
+  1386071: ($0, $1, $2) => {
     const dataPtr = $0;
     const dataLen = $1;
     const filename = UTF8ToString($2);
@@ -10135,7 +10139,7 @@ var ASM_CONSTS = {
     a.click();
     URL.revokeObjectURL(url);
   },
-  1385047: ($0, $1) => {
+  1386424: ($0, $1) => {
     const out_ptr = $0;
     const maxlen = $1;
     const res = sessionStorage.getItem("rekav_image_array");
@@ -10143,12 +10147,13 @@ var ASM_CONSTS = {
     const len = lengthBytesUTF8(res) + 1;
     if (len > maxlen) {
       stringToUTF8("TOO_LARGE", out_ptr, maxlen);
+      reset_current_input();
       return;
     }
     stringToUTF8(res, out_ptr, maxlen);
     sessionStorage.removeItem("rekav_image_array");
   },
-  1385361: ($0, $1) => {
+  1386761: ($0, $1) => {
     const out_ptr = $0;
     const maxlen = $1;
     const res = sessionStorage.getItem("rekav_translate_result");
@@ -10162,7 +10167,7 @@ var ASM_CONSTS = {
     stringToUTF8(res, out_ptr, maxlen);
     sessionStorage.removeItem("rekav_translate_result");
   },
-  1385757: ($0, $1) => {
+  1387157: ($0, $1) => {
     const out_ptr = $0;
     const maxlen = $1;
     const res = sessionStorage.getItem("rekav_weather_result");
@@ -10172,7 +10177,7 @@ var ASM_CONSTS = {
     stringToUTF8(res, out_ptr, maxlen);
     sessionStorage.removeItem("rekav_weather_result");
   },
-  1386029: $0 => {
+  1387429: $0 => {
     var str = UTF8ToString($0) + "\n\n" + "Abort/Retry/Ignore/AlwaysIgnore? [ariA] :";
     var reply = window.prompt(str, "i");
     if (reply === null) {
@@ -10180,7 +10185,7 @@ var ASM_CONSTS = {
     }
     return reply.length === 1 ? reply.charCodeAt(0) : -1;
   },
-  1386244: () => {
+  1387644: () => {
     if (typeof (AudioContext) !== "undefined") {
       return true;
     } else if (typeof (webkitAudioContext) !== "undefined") {
@@ -10188,7 +10193,7 @@ var ASM_CONSTS = {
     }
     return false;
   },
-  1386391: () => {
+  1387791: () => {
     if ((typeof (navigator.mediaDevices) !== "undefined") && (typeof (navigator.mediaDevices.getUserMedia) !== "undefined")) {
       return true;
     } else if (typeof (navigator.webkitGetUserMedia) !== "undefined") {
@@ -10196,7 +10201,7 @@ var ASM_CONSTS = {
     }
     return false;
   },
-  1386625: $0 => {
+  1388025: $0 => {
     if (typeof (Module["SDL2"]) === "undefined") {
       Module["SDL2"] = {};
     }
@@ -10220,11 +10225,11 @@ var ASM_CONSTS = {
     }
     return SDL2.audioContext === undefined ? -1 : 0;
   },
-  1387177: () => {
+  1388577: () => {
     var SDL2 = Module["SDL2"];
     return SDL2.audioContext.sampleRate;
   },
-  1387245: ($0, $1, $2, $3) => {
+  1388645: ($0, $1, $2, $3) => {
     var SDL2 = Module["SDL2"];
     var have_microphone = function(stream) {
       if (SDL2.capture.silenceTimer !== undefined) {
@@ -10266,7 +10271,7 @@ var ASM_CONSTS = {
       }, have_microphone, no_microphone);
     }
   },
-  1388938: ($0, $1, $2, $3) => {
+  1390338: ($0, $1, $2, $3) => {
     var SDL2 = Module["SDL2"];
     SDL2.audio.scriptProcessorNode = SDL2.audioContext["createScriptProcessor"]($1, 0, $0);
     SDL2.audio.scriptProcessorNode["onaudioprocess"] = function(e) {
@@ -10298,7 +10303,7 @@ var ASM_CONSTS = {
       SDL2.audio.silenceTimer = setInterval(silence_callback, ($1 / SDL2.audioContext.sampleRate) * 1e3);
     }
   },
-  1390113: ($0, $1) => {
+  1391513: ($0, $1) => {
     var SDL2 = Module["SDL2"];
     var numChannels = SDL2.capture.currentCaptureBuffer.numberOfChannels;
     for (var c = 0; c < numChannels; ++c) {
@@ -10317,7 +10322,7 @@ var ASM_CONSTS = {
       }
     }
   },
-  1390718: ($0, $1) => {
+  1392118: ($0, $1) => {
     var SDL2 = Module["SDL2"];
     var buf = $0 >>> 2;
     var numChannels = SDL2.audio.currentOutputBuffer["numberOfChannels"];
@@ -10331,7 +10336,7 @@ var ASM_CONSTS = {
       }
     }
   },
-  1391207: $0 => {
+  1392607: $0 => {
     var SDL2 = Module["SDL2"];
     if ($0) {
       if (SDL2.capture.silenceTimer !== undefined) {
@@ -10365,7 +10370,7 @@ var ASM_CONSTS = {
       SDL2.audioContext = undefined;
     }
   },
-  1392213: ($0, $1, $2) => {
+  1393613: ($0, $1, $2) => {
     var w = $0;
     var h = $1;
     var pixels = $2;
@@ -10436,7 +10441,7 @@ var ASM_CONSTS = {
     }
     SDL2.ctx.putImageData(SDL2.image, 0, 0);
   },
-  1393679: ($0, $1, $2, $3, $4) => {
+  1395079: ($0, $1, $2, $3, $4) => {
     var w = $0;
     var h = $1;
     var hot_x = $2;
@@ -10473,19 +10478,29 @@ var ASM_CONSTS = {
     stringToUTF8(url, urlBuf, url.length + 1);
     return urlBuf;
   },
-  1394667: $0 => {
+  1396067: $0 => {
     if (Module["canvas"]) {
       Module["canvas"].style["cursor"] = UTF8ToString($0);
     }
   },
-  1394750: () => {
+  1396150: () => {
     if (Module["canvas"]) {
       Module["canvas"].style["cursor"] = "none";
     }
   },
-  1394819: () => window.innerWidth,
-  1394849: () => window.innerHeight
+  1396219: () => window.innerWidth,
+  1396249: () => window.innerHeight
 };
+
+function disable_canvas_smoothing() {
+  setTimeout(function() {
+    var canvas = Module.canvas;
+    if (!canvas) return;
+    canvas.style.imageRendering = "pixelated";
+    canvas.style.imageRendering = "crisp-edges";
+    canvas.style.imageRendering = "-moz-crisp-edges";
+  }, 0);
+}
 
 // Imports from the Wasm binary.
 var _main = Module["_main"] = makeInvalidEarlyAccess("_main");
@@ -10589,6 +10604,7 @@ var wasmImports = {
   /** @export */ _tzset_js: __tzset_js,
   /** @export */ alignfault,
   /** @export */ clock_time_get: _clock_time_get,
+  /** @export */ disable_canvas_smoothing,
   /** @export */ eglBindAPI: _eglBindAPI,
   /** @export */ eglChooseConfig: _eglChooseConfig,
   /** @export */ eglCreateContext: _eglCreateContext,

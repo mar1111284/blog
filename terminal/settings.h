@@ -131,7 +131,7 @@ void list_themes(void);
 void list_colors(void);
 void print_settings_help(void);
 
-
+void set_terminal_font_hinting(int hint);
 
 
 #endif

@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include "editor.h"
 
 #include "global.h"
 #include "data_codec.h"
@@ -33,6 +34,7 @@ Command commands[] = {
     {"debug", "App debug dump",app_debug_dump },
     {"version", "Version",cmd_version },
     {"log", "Log message",cmd_log },
+    {"editor", "Open editor",cmd_editor },
 };
 
 int command_count = sizeof(commands) / sizeof(commands[0]);
@@ -125,9 +127,9 @@ void cmd_log(const char *args) {
 void cmd_version(const char *args) {
 
     add_terminal_line("", LINE_FLAG_NONE);
-    add_terminal_line("--------------------------------------------------", LINE_FLAG_NONE);
-    add_terminal_line("                    VERSION                       ", LINE_FLAG_NONE);
-    add_terminal_line("--------------------------------------------------", LINE_FLAG_NONE);
+    add_terminal_line("--------------------------------------------------", LINE_FLAG_SYSTEM);
+    add_terminal_line("                    VERSION                       ", LINE_FLAG_SYSTEM);
+    add_terminal_line("--------------------------------------------------", LINE_FLAG_SYSTEM);
     add_terminal_line("", LINE_FLAG_NONE);
 
     add_terminal_line("Components:", LINE_FLAG_NONE);
@@ -155,9 +157,9 @@ void cmd_version(const char *args) {
     add_terminal_line(buf, LINE_FLAG_NONE);
 
     add_terminal_line("", LINE_FLAG_NONE);
-    add_terminal_line("--------------------------------------------------", LINE_FLAG_NONE);
-    add_terminal_line("            Type 'help' to see commands           ", LINE_FLAG_NONE);
-    add_terminal_line("--------------------------------------------------", LINE_FLAG_NONE);
+    add_terminal_line("--------------------------------------------------", LINE_FLAG_SYSTEM);
+    add_terminal_line("            Type 'help' to see commands           ", LINE_FLAG_SYSTEM);
+    add_terminal_line("--------------------------------------------------", LINE_FLAG_SYSTEM);
     add_terminal_line("", LINE_FLAG_NONE);
 }
 
@@ -165,9 +167,9 @@ void cmd_version(const char *args) {
 void cmd_help(const char *args) {
 
     add_terminal_line("", LINE_FLAG_NONE);
-    add_terminal_line("--------------------------------------------------", LINE_FLAG_NONE);
-    add_terminal_line("                     HELP                         ", LINE_FLAG_NONE);
-    add_terminal_line("--------------------------------------------------", LINE_FLAG_NONE);
+    add_terminal_line("--------------------------------------------------", LINE_FLAG_SYSTEM);
+    add_terminal_line("                     HELP                         ", LINE_FLAG_SYSTEM);
+    add_terminal_line("--------------------------------------------------", LINE_FLAG_SYSTEM);
     add_terminal_line("", LINE_FLAG_NONE);
 
     add_terminal_line("Commands:", LINE_FLAG_NONE);
@@ -184,11 +186,12 @@ void cmd_help(const char *args) {
     add_terminal_line("  to_ascii <link>              - Convert image to ASCII", LINE_FLAG_NONE);
     add_terminal_line("  debug                        - Get App context dump (dev)", LINE_FLAG_NONE);
     add_terminal_line("  log                          - Get log messages", LINE_FLAG_NONE);
+    add_terminal_line("  editor                       - Write, Code, C compilator", LINE_FLAG_NONE);
     
     add_terminal_line("", LINE_FLAG_NONE);
-    add_terminal_line("--------------------------------------------------", LINE_FLAG_NONE);
-    add_terminal_line("        Type 'man <command>' for more info       ", LINE_FLAG_NONE);
-    add_terminal_line("--------------------------------------------------", LINE_FLAG_NONE);
+    add_terminal_line("--------------------------------------------------", LINE_FLAG_SYSTEM);
+    add_terminal_line("        Type 'man <command>' for more info       ", LINE_FLAG_SYSTEM);
+    add_terminal_line("--------------------------------------------------", LINE_FLAG_SYSTEM);
     add_terminal_line("", LINE_FLAG_NONE);
 }
 
@@ -345,6 +348,24 @@ void cmd_man(const char *args) {
     }
 
     add_terminal_line("No manual entry for this command.", LINE_FLAG_SYSTEM);
+}
+
+void cmd_editor(const char *args) {
+    // If user just typed "editor" without args
+    if (!args || strlen(args) == 0) {
+        add_terminal_line("Opening editor...", LINE_FLAG_SYSTEM);
+        if(g_editor.init != 1) editor_init();
+        g_editor.active = 1;
+        return;
+    }
+
+    // Optional: future flags parsing, e.g., "editor newfile.txt"
+    char buf[128];
+    snprintf(buf, sizeof(buf), "Unknown argument: '%s'", args);
+    add_terminal_line(buf, LINE_FLAG_WARNING);
+
+    add_terminal_line("Usage: editor", LINE_FLAG_SYSTEM);
+    add_terminal_line("Opens the text editor overlay. Escape to exit.", LINE_FLAG_SYSTEM);
 }
 
 void cmd_settings(const char *args) {
@@ -570,5 +591,124 @@ void cmd_translate(const char *args) {
     #endif
 }
 
+void app_debug_dump(const char *arg)
+{
+	
+	add_terminal_line("\n", LINE_FLAG_NONE);
+    add_terminal_line("----------------------------------------------", LINE_FLAG_SYSTEM);
+    add_terminal_line("          FULL AppContext DEBUG DUMP          ", LINE_FLAG_SYSTEM | LINE_FLAG_HIGHLIGHT);
+    add_terminal_line("----------------------------------------------", LINE_FLAG_SYSTEM);
 
+    // ── Config ──────────────────────────────────────────────────────────────
+    add_terminal_line("Config:", LINE_FLAG_SYSTEM);
+    char buf[256];
+    snprintf(buf, sizeof(buf), "  viewport_width:  %d", app.config.viewport_width);
+    add_terminal_line(buf, LINE_FLAG_NONE);
+    snprintf(buf, sizeof(buf), "  viewport_height: %d", app.config.viewport_height);
+    add_terminal_line(buf, LINE_FLAG_NONE);
+    snprintf(buf, sizeof(buf), "  is_mobile_view:  %s", app.is_mobile_view ? "YES" : "NO");
+    add_terminal_line(buf, LINE_FLAG_NONE);
+    snprintf(buf, sizeof(buf), "  font_size:       %d", app.config.font_size);
+    add_terminal_line(buf, LINE_FLAG_NONE);
+    snprintf(buf, sizeof(buf), "  fullscreen:      %d", app.fullscreen);
+    add_terminal_line(buf, LINE_FLAG_NONE);
+    add_terminal_line("\n", LINE_FLAG_NONE);
+
+    // ── SDL Context ─────────────────────────────────────────────────────────
+    add_terminal_line("SDL Context:", LINE_FLAG_SYSTEM);
+    snprintf(buf, sizeof(buf), "  window:          %p", (void*)app.sdl.window);
+    add_terminal_line(buf, LINE_FLAG_NONE);
+    snprintf(buf, sizeof(buf), "  renderer:        %p", (void*)app.sdl.renderer);
+    add_terminal_line(buf, LINE_FLAG_NONE);
+    add_terminal_line("\n", LINE_FLAG_NONE);
+
+    // ── Terminal - Core ─────────────────────────────────────────────────────
+    add_terminal_line("Terminal - Core:", LINE_FLAG_SYSTEM);
+    snprintf(buf, sizeof(buf), "  running:              %d", app.terminal.running);
+    add_terminal_line(buf, LINE_FLAG_NONE);
+    snprintf(buf, sizeof(buf), "  width / height:       %d x %d", app.terminal.width, app.terminal.height);
+    add_terminal_line(buf, LINE_FLAG_NONE);
+    snprintf(buf, sizeof(buf), "  line_count:           %d / %d", app.terminal.line_count, MAX_LINES);
+    add_terminal_line(buf, LINE_FLAG_NONE);
+    snprintf(buf, sizeof(buf), "  scroll_offset_px:     %d", app.terminal.scroll_offset_px);
+    add_terminal_line(buf, LINE_FLAG_NONE);
+    snprintf(buf, sizeof(buf), "  max_scroll:           %d", app.terminal.max_scroll);
+    add_terminal_line(buf, LINE_FLAG_NONE);
+    snprintf(buf, sizeof(buf), "  dirty:                %d", app.terminal.dirty);
+    add_terminal_line(buf, LINE_FLAG_NONE);
+    add_terminal_line("\n", LINE_FLAG_NONE);
+
+    // ── Terminal - Settings ─────────────────────────────────────────────────
+    add_terminal_line("Terminal Settings:", LINE_FLAG_SYSTEM);
+    snprintf(buf, sizeof(buf), "  theme_name:           %s", app.terminal.settings.theme_name ? app.terminal.settings.theme_name : "(null)");
+    add_terminal_line(buf, LINE_FLAG_NONE);
+    snprintf(buf, sizeof(buf), "  font:                 %p", (void*)app.terminal.settings.font);
+    add_terminal_line(buf, LINE_FLAG_NONE);
+    snprintf(buf, sizeof(buf), "  font_size:            %d", app.terminal.settings.font_size);
+    add_terminal_line(buf, LINE_FLAG_NONE);
+    snprintf(buf, sizeof(buf), "  line_height:          %d", app.terminal.settings.line_height);
+    add_terminal_line(buf, LINE_FLAG_NONE);
+    snprintf(buf, sizeof(buf), "  letter_spacing:       %d", app.terminal.settings.letter_spacing);
+    add_terminal_line(buf, LINE_FLAG_NONE);
+    add_terminal_line("\n", LINE_FLAG_NONE);
+
+    // Colors (RGB values)
+    snprintf(buf, sizeof(buf), "  background:           (%d,%d,%d,%d)",
+             app.terminal.settings.background.r, app.terminal.settings.background.g,
+             app.terminal.settings.background.b, app.terminal.settings.background.a);
+    add_terminal_line(buf, LINE_FLAG_NONE);
+    snprintf(buf, sizeof(buf), "  font_color:           (%d,%d,%d,%d)",
+             app.terminal.settings.font_color.r, app.terminal.settings.font_color.g,
+             app.terminal.settings.font_color.b, app.terminal.settings.font_color.a);
+    add_terminal_line(buf, LINE_FLAG_NONE);
+    snprintf(buf, sizeof(buf), "  line_bg_color:        (%d,%d,%d,%d)",
+             app.terminal.settings.line_background_color.r,
+             app.terminal.settings.line_background_color.g,
+             app.terminal.settings.line_background_color.b,
+             app.terminal.settings.line_background_color.a);
+    add_terminal_line(buf, LINE_FLAG_NONE);
+    add_terminal_line("\n", LINE_FLAG_NONE);
+
+    // ── Terminal - Current Input ────────────────────────────────────────────
+    add_terminal_line("Current Input:", LINE_FLAG_SYSTEM);
+    snprintf(buf, sizeof(buf), "  cursor_pos:           %d", app.terminal.input.cursor_pos);
+    add_terminal_line(buf, LINE_FLAG_NONE);
+    snprintf(buf, sizeof(buf), "  prompt_len:           %d", app.terminal.input.prompt_len);
+    add_terminal_line(buf, LINE_FLAG_NONE);
+    snprintf(buf, sizeof(buf), "  buffer length:        %zu", strlen(app.terminal.input.buffer));
+    add_terminal_line(buf, LINE_FLAG_NONE);
+    add_terminal_line("\n", LINE_FLAG_NONE);
+
+    // ── Terminal - History ──────────────────────────────────────────────────
+    add_terminal_line("Command History:", LINE_FLAG_SYSTEM);
+    snprintf(buf, sizeof(buf), "  count:                %d / %d", app.terminal.history.count, MAX_HISTORY_COMMANDS);
+    add_terminal_line(buf, LINE_FLAG_NONE);
+    snprintf(buf, sizeof(buf), "  current pos:          %d", app.terminal.history.pos);
+    add_terminal_line(buf, LINE_FLAG_NONE);
+    add_terminal_line("\n", LINE_FLAG_NONE);
+
+    // ── Global Flags ────────────────────────────────────────────────────────
+    add_terminal_line("Global Flags:", LINE_FLAG_SYSTEM);
+    snprintf(buf, sizeof(buf), "  root_active:          %d", app.root_active);
+    add_terminal_line(buf, LINE_FLAG_NONE);
+    snprintf(buf, sizeof(buf), "  awaiting_sudo_password: %d", app.awaiting_sudo_password);
+    add_terminal_line(buf, LINE_FLAG_NONE);
+    snprintf(buf, sizeof(buf), "  translation_pending:  %d", app.translation_pending);
+    add_terminal_line(buf, LINE_FLAG_NONE);
+    snprintf(buf, sizeof(buf), "  weather_forecast_pending: %d", app.weather_forecast_pending);
+    add_terminal_line(buf, LINE_FLAG_NONE);
+    snprintf(buf, sizeof(buf), "  image_processing_pending: %d", app.image_processing_pending);
+    add_terminal_line(buf, LINE_FLAG_NONE);
+    snprintf(buf, sizeof(buf), "  image_download_pending: %d", app.image_download_pending);
+    add_terminal_line(buf, LINE_FLAG_NONE);
+    snprintf(buf, sizeof(buf), "  last_activity:        %u ms ago", SDL_GetTicks() - app.last_activity);
+    add_terminal_line(buf, LINE_FLAG_NONE);
+    add_terminal_line("\n", LINE_FLAG_NONE);
+
+    add_terminal_line("----------------------------------------------", LINE_FLAG_SYSTEM);
+    add_terminal_line("               End of debug dump              ", LINE_FLAG_SYSTEM);
+    add_terminal_line("----------------------------------------------", LINE_FLAG_SYSTEM);
+    add_terminal_line("\n", LINE_FLAG_NONE);
+    
+}
 

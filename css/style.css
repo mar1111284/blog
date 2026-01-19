@@ -138,12 +138,15 @@ footer {
 
 /* General mobile adjustments (phones + small tablets) */
 @media (max-width: 768px) {
+
+	#about-text {
+		padding: 12px;
+	}
     body {
         padding: 0;
     }
 
     header {
-    	display: none;
         margin-bottom: 10px;
         padding: 10px;
     }
@@ -165,10 +168,11 @@ footer {
     }
 
     nav a {
-        font-size: 1.4rem;
+        font-size: 1.25rem;
     }
 
     #terminal-frame {
+    	display: block;
     	position: absolute;
     	top: 0;
     	left: 0;

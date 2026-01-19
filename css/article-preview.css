@@ -96,6 +96,11 @@
    Mobile adjustments
    ──────────────────────────────────────────────── */
 @media (max-width: 768px) {
+
+	.preview-media.random img {
+	
+		width: 95%;
+	}
   .preview-list {
     padding: 0;
     margin: 0;

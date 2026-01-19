@@ -3,8 +3,8 @@
 
 # === Configuration ===
 TARGET = terminal
-SOURCES = main.c base64.c data_codec.c settings.c cmd.c sdl.c ascii_converter.c translate.c forecast.c
-ASSETS = welcome.txt info.txt manifesto.txt font.ttf assets/bg_barbie.png assets/bg_jurassic.png
+SOURCES = main.c base64.c data_codec.c settings.c cmd.c sdl.c ascii_converter.c translate.c forecast.c editor.c
+ASSETS = welcome.txt info.txt font.ttf assets/bg_barbie.png assets/bg_jurassic.png
 
 # Define the flags as a variable (no indentation here)
 EMSDK_FLAGS = \

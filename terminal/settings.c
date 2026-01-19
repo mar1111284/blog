@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include "global.h"
 #include "settings.h"
+#include <SDL_ttf.h>
 
 TerminalSettings settings;
 
@@ -42,11 +43,11 @@ const NamedColor predefined_colors[] = {
 static const Theme predefined_themes[] = {
     {
         "default",
-        {18, 18, 18, 255},
+        {21, 21, 21, 255},
         NULL,
-        {255, 255, 255, 255},  // font color
+        {240, 240, 240, 255},  // font color
         {0, 0, 0, 0},          // line bg color
-        16,                    // font size
+        17,                    // font size
         19,                    // line height
         0                      // letter spacing
     },
@@ -181,6 +182,12 @@ void print_settings_help(void) {
     }
 }
 
+void set_terminal_font_hinting(int hint)
+{
+    if (!app.terminal.settings.font) return;
+
+    TTF_SetFontHinting(app.terminal.settings.font, hint);
+}
 
 static const int PREDEFINED_THEME_COUNT = sizeof(predefined_themes) / sizeof(predefined_themes[0]);
 

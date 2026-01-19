@@ -36,6 +36,8 @@ void cmd_translate(const char *args);
 void cmd_man(const char *args);
 void cmd_weather(const char *args);
 void cmd_to_ascii(const char *args);
+void cmd_editor(const char *args);
+void app_debug_dump(const char *arg);
 
 #endif // CMD_H
 

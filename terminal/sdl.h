@@ -15,5 +15,8 @@ typedef struct {
 int init_sdl(SDLContext *ctx, const char *title, int w, int h, int font_size);
 void cleanup_sdl(SDLContext *ctx);
 
+// Editor
+void editor_handle_key(SDL_Event *e);	
+
 #endif /* SDL_CONTEXT_H */
 

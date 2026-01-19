@@ -22,7 +22,6 @@ int poll_forecast_result(void) {
 	#endif
 
     if (buf[0] != '\0') {
-        _weather_forecast_pending = 0;
         char *line = buf;
         while (*line) {
             char *next = strchr(line, '\n');
@@ -36,6 +35,8 @@ int poll_forecast_result(void) {
             line = (*next) ? next + 1 : next;
         }
         add_terminal_line("", LINE_FLAG_NONE);
+        _weather_forecast_pending = 0;
+        reset_current_input();
         return 1;
     }
 

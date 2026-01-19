@@ -284,6 +284,7 @@ void process_image_to_pixels(unsigned char *raw_data, int raw_size) {
 
     if (raw_size <= 0 || raw_size > 20 * 1024 * 1024) {
         add_terminal_line("Error: Invalid image size", LINE_FLAG_ERROR);
+        reset_current_input();
         return;
     }
 
@@ -291,6 +292,7 @@ void process_image_to_pixels(unsigned char *raw_data, int raw_size) {
     unsigned char *pixels = stbi_load_from_memory(raw_data, raw_size, &width, &height, &channels, 4);
     if (!pixels) {
         add_terminal_line("Error: Failed to decode image", LINE_FLAG_ERROR);
+        reset_current_input();
         return;
     }
 
@@ -301,7 +303,7 @@ void process_image_to_pixels(unsigned char *raw_data, int raw_size) {
     int target_width = global_opts.chars_wide ? global_opts.chars_wide : 130;
     int font_size = global_opts.font_size ? global_opts.font_size : 8;
     if(font_size >= 9) font_size = 9;
-    const float char_aspect = 2.2f;
+    const float char_aspect = 1.6f;
     int target_height = (int)((float)(height * target_width) / (float)width / char_aspect);
 
     char size_dbg[128];
@@ -422,6 +424,7 @@ int poll_image_result(void) {
         const len = lengthBytesUTF8(res) + 1;
         if (len > maxlen) {
             stringToUTF8("TOO_LARGE", out_ptr, maxlen);
+            reset_current_input();
             return;
         }
         stringToUTF8(res, out_ptr, maxlen);
@@ -433,12 +436,14 @@ int poll_image_result(void) {
     if (strncmp(base64_buf, "__ERROR__:", 10) == 0) {
         _image_processing_pending = 0;
         add_terminal_line(base64_buf + 10, LINE_FLAG_ERROR);
+        reset_current_input();
         return 1;
     }
 
     if (strcmp(base64_buf, "TOO_LARGE") == 0) {
         _image_processing_pending = 0;
         add_terminal_line("Error: Image too large (base64 exceeds buffer)", LINE_FLAG_ERROR);
+        reset_current_input();
         return 1;
     }
 
@@ -450,6 +455,7 @@ int poll_image_result(void) {
         if (!image_raw) {
             _image_processing_pending = 0;
             add_terminal_line("Error: Cannot allocate image buffer", LINE_FLAG_ERROR);
+            reset_current_input();
             return 1;
         }
     }
@@ -458,6 +464,7 @@ int poll_image_result(void) {
     if (decoded_bytes < 0) {
         _image_processing_pending = 0;
         add_terminal_line("Error: Invalid base64 data", LINE_FLAG_ERROR);
+        reset_current_input();
         return 1;
     }
 
@@ -473,8 +480,10 @@ int poll_image_result(void) {
     	add_terminal_line("call export Ascii", LINE_FLAG_SYSTEM);
         export_ascii(image_raw, decoded_bytes, global_opts);
         _image_download_pending = 0;
+        reset_current_input();
     }
-
+    _image_download_pending = 0;
+    reset_current_input();
     return 1;
 }
 #endif

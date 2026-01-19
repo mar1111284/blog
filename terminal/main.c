@@ -2,6 +2,7 @@
 #include <emscripten.h>
 #include <emscripten/emscripten.h>
 #endif
+
 #include <string.h>
 #include <stdio.h>
 #include <SDL.h>
@@ -16,19 +17,35 @@
 #include "sdl.h"
 #include "translate.h"
 #include "forecast.h"
+#include "editor.h"
+
+#ifdef __EMSCRIPTEN__
+#include <emscripten.h>
+
+EM_JS(void, disable_canvas_smoothing, (), {
+    setTimeout(function () {
+        var canvas = Module.canvas;
+        if (!canvas) return;
+        canvas.style.imageRendering = "pixelated";
+        canvas.style.imageRendering = "crisp-edges";
+        canvas.style.imageRendering = "-moz-crisp-edges";
+    }, 0);
+});
+#endif
 
 AppContext app = {ZERO_MEMORY};
 
 void app_init(void) {
 
     memset(&app, ZERO_MEMORY, sizeof(AppContext));
-
+	
     VersionInfo v = {
         .app               = {"1.0", "2026-01-18"},
         .terminal          = {"1.0", "2026-01-17"},
         .weather_forecast  = {"1.0", "2026-01-16"},
         .ascii_converter   = {"1.0", "2026-01-15"},
-        .translator        = {"1.0", "2026-01-14"}
+        .translator        = {"1.0", "2026-01-14"},
+        .editor            = {"dev", "2026-01-14"},
     };
 
     app.version = v; 
@@ -51,10 +68,11 @@ void app_init(void) {
         exit(TRUE);
     }
 
-    apply_theme(&app.terminal.settings, THEME_INFERNO);
+    apply_theme(&app.terminal.settings, THEME_DEFAULT);
 
     app.terminal.running = TRUE;
-    app.terminal.tick_rate = MEDIUM; // 30 FPS
+    app.terminal.tick_rate = MEDIUM;
+    app.terminal.last_tick = 0;
     app.terminal.width   = app.config.viewport_width;
     app.terminal.height  = app.config.viewport_height;
     app.terminal.scroll_offset_px = ZERO_MEMORY;
@@ -82,133 +100,26 @@ void app_init(void) {
             printf("Failed to load font: %s\n", TTF_GetError());
         }
     }
+    
+    set_terminal_font_hinting(TTF_HINTING_MONO);
+    
+	add_terminal_line(" ╔════════════════════════════════════════╗", LINE_FLAG_SYSTEM);
+	add_terminal_line(" ║          Rekav Terminal v1.0           ║", LINE_FLAG_SYSTEM);
+	add_terminal_line(" ╚════════════════════════════════════════╝", LINE_FLAG_SYSTEM);
+	add_terminal_line("", LINE_FLAG_NONE);
+	add_terminal_line("  Minimalist. For Fun. Built in pure C and WASM Emscripten.", LINE_FLAG_HIGHLIGHT);
+	add_terminal_line("  • Built-in ASCII art converter", LINE_FLAG_NONE);
+	add_terminal_line("  • Simple code editor (Esc to exit)", LINE_FLAG_NONE);
+	add_terminal_line("  • Tiny C compiler playground coming soon…", LINE_FLAG_NONE);
+	add_terminal_line("", LINE_FLAG_NONE);
+	add_terminal_line("  Type 'help' or just start typing :)", LINE_FLAG_ITALIC);
+	add_terminal_line(" ", LINE_FLAG_NONE);
+	add_terminal_line("  Have fun!", LINE_FLAG_HIGHLIGHT);
+	add_terminal_line(" ", LINE_FLAG_NONE);
 
-    add_terminal_line("Welcome to Rekav Terminal - 2026", LINE_FLAG_SYSTEM);
-    add_terminal_line("Type 'help' for commands.", LINE_FLAG_NONE);
     reset_current_input();
 
     update_max_scroll();
-}
-
-void app_debug_dump(const char *arg)
-{
-	
-	add_terminal_line("\n", LINE_FLAG_NONE);
-    add_terminal_line("----------------------------------------------", LINE_FLAG_SYSTEM);
-    add_terminal_line("          FULL AppContext DEBUG DUMP          ", LINE_FLAG_SYSTEM | LINE_FLAG_HIGHLIGHT);
-    add_terminal_line("----------------------------------------------", LINE_FLAG_SYSTEM);
-
-    // ── Config ──────────────────────────────────────────────────────────────
-    add_terminal_line("Config:", LINE_FLAG_SYSTEM);
-    char buf[256];
-    snprintf(buf, sizeof(buf), "  viewport_width:  %d", app.config.viewport_width);
-    add_terminal_line(buf, LINE_FLAG_NONE);
-    snprintf(buf, sizeof(buf), "  viewport_height: %d", app.config.viewport_height);
-    add_terminal_line(buf, LINE_FLAG_NONE);
-    snprintf(buf, sizeof(buf), "  is_mobile_view:  %s", app.is_mobile_view ? "YES" : "NO");
-    add_terminal_line(buf, LINE_FLAG_NONE);
-    snprintf(buf, sizeof(buf), "  font_size:       %d", app.config.font_size);
-    add_terminal_line(buf, LINE_FLAG_NONE);
-    snprintf(buf, sizeof(buf), "  fullscreen:      %d", app.fullscreen);
-    add_terminal_line(buf, LINE_FLAG_NONE);
-    add_terminal_line("\n", LINE_FLAG_NONE);
-
-    // ── SDL Context ─────────────────────────────────────────────────────────
-    add_terminal_line("SDL Context:", LINE_FLAG_SYSTEM);
-    snprintf(buf, sizeof(buf), "  window:          %p", (void*)app.sdl.window);
-    add_terminal_line(buf, LINE_FLAG_NONE);
-    snprintf(buf, sizeof(buf), "  renderer:        %p", (void*)app.sdl.renderer);
-    add_terminal_line(buf, LINE_FLAG_NONE);
-    add_terminal_line("\n", LINE_FLAG_NONE);
-
-    // ── Terminal - Core ─────────────────────────────────────────────────────
-    add_terminal_line("Terminal - Core:", LINE_FLAG_SYSTEM);
-    snprintf(buf, sizeof(buf), "  running:              %d", app.terminal.running);
-    add_terminal_line(buf, LINE_FLAG_NONE);
-    snprintf(buf, sizeof(buf), "  width / height:       %d x %d", app.terminal.width, app.terminal.height);
-    add_terminal_line(buf, LINE_FLAG_NONE);
-    snprintf(buf, sizeof(buf), "  line_count:           %d / %d", app.terminal.line_count, MAX_LINES);
-    add_terminal_line(buf, LINE_FLAG_NONE);
-    snprintf(buf, sizeof(buf), "  scroll_offset_px:     %d", app.terminal.scroll_offset_px);
-    add_terminal_line(buf, LINE_FLAG_NONE);
-    snprintf(buf, sizeof(buf), "  max_scroll:           %d", app.terminal.max_scroll);
-    add_terminal_line(buf, LINE_FLAG_NONE);
-    snprintf(buf, sizeof(buf), "  dirty:                %d", app.terminal.dirty);
-    add_terminal_line(buf, LINE_FLAG_NONE);
-    add_terminal_line("\n", LINE_FLAG_NONE);
-
-    // ── Terminal - Settings ─────────────────────────────────────────────────
-    add_terminal_line("Terminal Settings:", LINE_FLAG_SYSTEM);
-    snprintf(buf, sizeof(buf), "  theme_name:           %s", app.terminal.settings.theme_name ? app.terminal.settings.theme_name : "(null)");
-    add_terminal_line(buf, LINE_FLAG_NONE);
-    snprintf(buf, sizeof(buf), "  font:                 %p", (void*)app.terminal.settings.font);
-    add_terminal_line(buf, LINE_FLAG_NONE);
-    snprintf(buf, sizeof(buf), "  font_size:            %d", app.terminal.settings.font_size);
-    add_terminal_line(buf, LINE_FLAG_NONE);
-    snprintf(buf, sizeof(buf), "  line_height:          %d", app.terminal.settings.line_height);
-    add_terminal_line(buf, LINE_FLAG_NONE);
-    snprintf(buf, sizeof(buf), "  letter_spacing:       %d", app.terminal.settings.letter_spacing);
-    add_terminal_line(buf, LINE_FLAG_NONE);
-    add_terminal_line("\n", LINE_FLAG_NONE);
-
-    // Colors (RGB values)
-    snprintf(buf, sizeof(buf), "  background:           (%d,%d,%d,%d)",
-             app.terminal.settings.background.r, app.terminal.settings.background.g,
-             app.terminal.settings.background.b, app.terminal.settings.background.a);
-    add_terminal_line(buf, LINE_FLAG_NONE);
-    snprintf(buf, sizeof(buf), "  font_color:           (%d,%d,%d,%d)",
-             app.terminal.settings.font_color.r, app.terminal.settings.font_color.g,
-             app.terminal.settings.font_color.b, app.terminal.settings.font_color.a);
-    add_terminal_line(buf, LINE_FLAG_NONE);
-    snprintf(buf, sizeof(buf), "  line_bg_color:        (%d,%d,%d,%d)",
-             app.terminal.settings.line_background_color.r,
-             app.terminal.settings.line_background_color.g,
-             app.terminal.settings.line_background_color.b,
-             app.terminal.settings.line_background_color.a);
-    add_terminal_line(buf, LINE_FLAG_NONE);
-    add_terminal_line("\n", LINE_FLAG_NONE);
-
-    // ── Terminal - Current Input ────────────────────────────────────────────
-    add_terminal_line("Current Input:", LINE_FLAG_SYSTEM);
-    snprintf(buf, sizeof(buf), "  cursor_pos:           %d", app.terminal.input.cursor_pos);
-    add_terminal_line(buf, LINE_FLAG_NONE);
-    snprintf(buf, sizeof(buf), "  prompt_len:           %d", app.terminal.input.prompt_len);
-    add_terminal_line(buf, LINE_FLAG_NONE);
-    snprintf(buf, sizeof(buf), "  buffer length:        %zu", strlen(app.terminal.input.buffer));
-    add_terminal_line(buf, LINE_FLAG_NONE);
-    add_terminal_line("\n", LINE_FLAG_NONE);
-
-    // ── Terminal - History ──────────────────────────────────────────────────
-    add_terminal_line("Command History:", LINE_FLAG_SYSTEM);
-    snprintf(buf, sizeof(buf), "  count:                %d / %d", app.terminal.history.count, MAX_HISTORY_COMMANDS);
-    add_terminal_line(buf, LINE_FLAG_NONE);
-    snprintf(buf, sizeof(buf), "  current pos:          %d", app.terminal.history.pos);
-    add_terminal_line(buf, LINE_FLAG_NONE);
-    add_terminal_line("\n", LINE_FLAG_NONE);
-
-    // ── Global Flags ────────────────────────────────────────────────────────
-    add_terminal_line("Global Flags:", LINE_FLAG_SYSTEM);
-    snprintf(buf, sizeof(buf), "  root_active:          %d", app.root_active);
-    add_terminal_line(buf, LINE_FLAG_NONE);
-    snprintf(buf, sizeof(buf), "  awaiting_sudo_password: %d", app.awaiting_sudo_password);
-    add_terminal_line(buf, LINE_FLAG_NONE);
-    snprintf(buf, sizeof(buf), "  translation_pending:  %d", app.translation_pending);
-    add_terminal_line(buf, LINE_FLAG_NONE);
-    snprintf(buf, sizeof(buf), "  weather_forecast_pending: %d", app.weather_forecast_pending);
-    add_terminal_line(buf, LINE_FLAG_NONE);
-    snprintf(buf, sizeof(buf), "  image_processing_pending: %d", app.image_processing_pending);
-    add_terminal_line(buf, LINE_FLAG_NONE);
-    snprintf(buf, sizeof(buf), "  image_download_pending: %d", app.image_download_pending);
-    add_terminal_line(buf, LINE_FLAG_NONE);
-    snprintf(buf, sizeof(buf), "  last_activity:        %u ms ago", SDL_GetTicks() - app.last_activity);
-    add_terminal_line(buf, LINE_FLAG_NONE);
-    add_terminal_line("\n", LINE_FLAG_NONE);
-
-    add_terminal_line("----------------------------------------------", LINE_FLAG_SYSTEM);
-    add_terminal_line("               End of debug dump              ", LINE_FLAG_SYSTEM);
-    add_terminal_line("----------------------------------------------", LINE_FLAG_SYSTEM);
-    add_terminal_line("\n", LINE_FLAG_NONE);
-    
 }
 
 void app_cleanup(void) {
@@ -377,7 +288,6 @@ void submit_input(void)
 		#endif
 	}
 	
-	
     reset_current_input();
     update_max_scroll();
 
@@ -414,9 +324,7 @@ void reset_current_input() {
 
 void add_terminal_line(const char *text, TerminalLineFlags flags)
 {
-    // ─────────────────────────────────────────────
-    // FIFO: if buffer is full, drop the oldest line
-    // ─────────────────────────────────────────────
+    // FIFO: buffer full, drop the oldest line
     if (_terminal.line_count == MAX_LINES) {
 
         // Destroy texture of the oldest line
@@ -435,38 +343,43 @@ void add_terminal_line(const char *text, TerminalLineFlags flags)
         _terminal.line_count = MAX_LINES - 1;
     }
 
-    // ─────────────────────────────────────────────
     // Append new line at tail
-    // ─────────────────────────────────────────────
     int idx = _terminal.line_count;
     TerminalLine *line = &_terminal.lines[idx];
-
-    // Reset the slot completely
     memset(line, 0, sizeof(*line));
 
-    // ─────────────────────────────────────────────
     // UTF-8 safe copy
-    // ─────────────────────────────────────────────
     size_t len = strnlen(text, MAX_LINE_LENGTH - 1);
     while (len > 0 && (text[len] & 0xC0) == 0x80) len--;
     memcpy(line->text, text, len);
     line->text[len] = '\0';
 
-    // ─────────────────────────────────────────────
     // Style & flags
-    // ─────────────────────────────────────────────
     SDL_Color font_color = _terminal.settings.font_color;
     SDL_Color bg_color   = _terminal.settings.line_background_color;
-    int font_style = TTF_STYLE_NORMAL;
+    
+	int font_style = TTF_STYLE_NORMAL;
 
-    if (flags & LINE_FLAG_ERROR) {
+	if (flags & LINE_FLAG_ERROR) {
         font_color = COLOR_RED_RGB;
-    } else if (flags & LINE_FLAG_SYSTEM) {
-        font_color = COLOR_CYAN_RGB;
-    } else if (flags & LINE_FLAG_HIGHLIGHT) {
-        font_color = COLOR_YELLOW_RGB;
-    } else if (flags & LINE_FLAG_WARNING) {
+        font_style |= TTF_STYLE_BOLD;
+    }
+    else if (flags & LINE_FLAG_WARNING) {
         font_color = COLOR_ORANGE_RGB;
+        font_style |= TTF_STYLE_BOLD;
+    }
+    else if (flags & LINE_FLAG_SYSTEM) {
+        font_color = COLOR_CYAN_RGB;
+    }
+    else if (flags & LINE_FLAG_HIGHLIGHT) {
+        font_color = COLOR_YELLOW_RGB;
+    }
+
+    if (flags & LINE_FLAG_BOLD) {
+        font_style |= TTF_STYLE_BOLD;
+    }
+    if (flags & LINE_FLAG_ITALIC) {
+        font_style |= TTF_STYLE_ITALIC;
     }
 
     line->font             = _terminal.settings.font;
@@ -479,9 +392,7 @@ void add_terminal_line(const char *text, TerminalLineFlags flags)
 
     TTF_SetFontStyle(line->font, font_style);
 
-    // ─────────────────────────────────────────────
     // Render text
-    // ─────────────────────────────────────────────
     int max_width = _terminal.width
                   - TERMINAL_PADDING_LEFT
                   - TERMINAL_PADDING_RIGHT
@@ -493,23 +404,17 @@ void add_terminal_line(const char *text, TerminalLineFlags flags)
         line->font_color,
         max_width
     );
+    
+	if (surface) {
+		line->texture = SDL_CreateTextureFromSurface(_sdl.renderer, surface);
+		line->width = surface->w;
+		line->height = surface->h;
+		line->line_height = SDL_max(surface->h, TTF_FontHeight(line->font) + 2);
+		SDL_FreeSurface(surface);
+	} else {
+		line->line_height = TTF_FontLineSkip(line->font);
+	}
 
-    if (surface) {
-        line->texture = SDL_CreateTextureFromSurface(_sdl.renderer, surface);
-        line->width   = surface->w;
-        line->height  = surface->h;
-        line->line_height = surface->h;
-        SDL_FreeSurface(surface);
-    } else {
-        line->texture = NULL;
-        line->width = 0;
-        line->height = 0;
-        line->line_height = _terminal.settings.line_height;
-    }
-
-    // ─────────────────────────────────────────────
-    // Finalize
-    // ─────────────────────────────────────────────
     _terminal.line_count++;
     _terminal.dirty = TRUE;
 
@@ -587,59 +492,81 @@ void update_input_texture(void)
     _terminal.input.dirty = false;
 }
 
-void render_terminal() {
-
-	// Background
+static void render_terminal_background(void)
+{
+    // Background clear
     SDL_SetRenderDrawColor(_sdl.renderer,
-        _terminal.settings.background.r, _terminal.settings.background.g,
-        _terminal.settings.background.b, _terminal.settings.background.a);
+                           _terminal.settings.background.r,
+                           _terminal.settings.background.g,
+                           _terminal.settings.background.b,
+                           _terminal.settings.background.a);
     SDL_RenderClear(_sdl.renderer);
 
+    // Background texture if any
     if (_terminal.settings.background_texture) {
         SDL_RenderCopy(_sdl.renderer, _terminal.settings.background_texture, NULL, NULL);
     }
-	
-	// Lines
-	int y = TERMINAL_PADDING_TOP - _terminal.scroll_offset_px;
-
-		for (int i = 0; i < _terminal.line_count; i++) {
-		    TerminalLine *ln = &_terminal.lines[i];
-
-		    if (y + ln->height < 0) {
-		        y += ln->line_height;
-		        continue;
-		    }
-
-		    if (ln->texture) {
-		        SDL_Rect dst = {TERMINAL_PADDING_LEFT, y, ln->width, ln->height};
-		        SDL_RenderCopy(_sdl.renderer, ln->texture, NULL, &dst);
-		    }
-
-		    y += ln->line_height;
-		}
-
-		update_input_texture();
-
-		if (_terminal.input.texture) {
-		    SDL_Rect dst = {
-		        TERMINAL_PADDING_LEFT,
-		        y,
-		        _terminal.input.texture_w,
-		        _terminal.input.texture_h
-		    };
-		    SDL_RenderCopy(_sdl.renderer, _terminal.input.texture, NULL, &dst);
-		}
-
-		SDL_RenderPresent(_sdl.renderer);
-		_terminal.dirty = FALSE;
 }
 
+static void render_terminal_lines(void)
+{
+    int y = TERMINAL_PADDING_TOP - _terminal.scroll_offset_px;
+
+    for (int i = 0; i < _terminal.line_count; i++) {
+        TerminalLine *ln = &_terminal.lines[i];
+
+        if (y + ln->height < 0) {
+            y += ln->line_height;
+            continue;
+        }
+
+        if (ln->texture) {
+            SDL_Rect dst = {TERMINAL_PADDING_LEFT, y, ln->width, ln->height};
+            SDL_RenderCopy(_sdl.renderer, ln->texture, NULL, &dst);
+        }
+
+        y += ln->line_height;
+    }
+}
+
+static void render_terminal_input(void)
+{
+    update_input_texture();
+
+    if (_terminal.input.texture) {
+        int input_y = TERMINAL_PADDING_TOP - _terminal.scroll_offset_px;
+        // Find y after last history line
+        for (int i = 0; i < _terminal.line_count; i++) {
+            input_y += _terminal.lines[i].line_height;
+        }
+
+        SDL_Rect dst = {
+            TERMINAL_PADDING_LEFT,
+            input_y,
+            _terminal.input.texture_w,
+            _terminal.input.texture_h
+        };
+        SDL_RenderCopy(_sdl.renderer, _terminal.input.texture, NULL, &dst);
+    }
+}
+
+void render_terminal(void)
+{
+    render_terminal_background();
+    render_terminal_lines();
+    render_terminal_input();
+
+    SDL_RenderPresent(_sdl.renderer);
+    _terminal.dirty = FALSE;
+}
 int is_at_bottom() {
     return _terminal.scroll_offset_px >= _terminal.max_scroll - 20; // small tolerance
 }
 
 static bool handle_history_navigation(SDL_Keycode key)
 {
+
+
     if (_awaiting_sudo_password) {
         return false;
     }
@@ -656,6 +583,7 @@ static bool handle_history_navigation(SDL_Keycode key)
         } else {
             return true;
         }
+        update_max_scroll();
     }
     else if (key == SDLK_DOWN) {
         if (_terminal.history.pos == -1) {
@@ -670,7 +598,9 @@ static bool handle_history_navigation(SDL_Keycode key)
             _terminal.dirty = TRUE;
             return true;
         }
+        update_max_scroll();
     }
+    
     else {
         return false;
     }
@@ -706,6 +636,7 @@ void insert_text_at_cursor(const char *text) {
 }
 
 void handle_keyboard_event(SDL_Event *e) {
+	
     if (e->type == SDL_KEYDOWN) {
     
 		if (is_at_bottom()) {
@@ -783,18 +714,23 @@ void handle_keyboard_event(SDL_Event *e) {
 	}
 }
 
-int tick_rate = MEDIUM;
-void main_loop(RENDER_TICK tick_rate) {
-    static Uint32 last_tick = 0;
+void main_loop() {
+	
+	// Tick bound
     Uint32 now = SDL_GetTicks();
-
-    // Limit tick rate
-    if (now - last_tick < tick_rate)
-        return; // skip this frame
-    last_tick = now;
+    if (now - _terminal.last_tick < _terminal.tick_rate)
+        return;
+    _terminal.last_tick = now;
 
     SDL_Event e;
+    
     while (SDL_PollEvent(&e)) {
+    
+		if (g_editor.active)
+	    {
+	        editor_handle_event(&e);
+	        continue;
+	    }
         switch (e.type) {
             case SDL_QUIT:
                 _terminal.running = FALSE;
@@ -802,8 +738,8 @@ void main_loop(RENDER_TICK tick_rate) {
 
             case SDL_KEYDOWN:
             case SDL_TEXTINPUT:
-                handle_keyboard_event(&e);
-                break;
+		            handle_keyboard_event(&e);
+		        break;
 
             case SDL_MOUSEWHEEL:
                 _terminal.scroll_offset_px -= e.wheel.y * SCROLL_DELTA_MULTIPLIER;
@@ -824,7 +760,12 @@ void main_loop(RENDER_TICK tick_rate) {
                 break;
         }
     }
-
+    
+	if (g_editor.active)
+    {
+        editor_render();   // ← Render the editor (full screen + status bar)
+        return;            // ← Skip terminal render
+    }
     if (_terminal.dirty || _terminal.input.dirty) {
         render_terminal();
     }
@@ -840,18 +781,10 @@ void main_loop(RENDER_TICK tick_rate) {
     }
 }
 
-void emscripten_loop_wrapper() {
-    main_loop(MEDIUM);
-}
-
 int main() {
 	app_init();
-	
-	while (_terminal.running) {
-	    emscripten_set_main_loop(emscripten_loop_wrapper, FALSE, TRUE);
-		SDL_Delay(1);
-	}
-
+	disable_canvas_smoothing();
+    emscripten_set_main_loop(main_loop, FALSE, TRUE);
     cleanup_sdl(&_sdl);
     return 0;
 }
@@ -861,7 +794,6 @@ void add_log(const char *text, LogType type) {
 
     int idx = (_terminal.log_count < LOG_MAX_LINES) ? _terminal.log_count : 0;
 
-    // Timestamp
     time_t now = time(NULL);
     struct tm *t = localtime(&now);
     if (t) {
@@ -873,14 +805,12 @@ void add_log(const char *text, LogType type) {
         strncpy(_terminal.logs[idx].datetime, "0000-00-00 00:00:00", sizeof(_terminal.logs[idx].datetime));
     }
 
-    // Store type and text
     _terminal.logs[idx].type = type;
     strncpy(_terminal.logs[idx].text, text, LOG_MAX_TEXT - 1);
     _terminal.logs[idx].text[LOG_MAX_TEXT - 1] = '\0';
 
     if (_terminal.log_count < LOG_MAX_LINES) _terminal.log_count++;
 
-    // Prepare formatted string
     char buf[600];
     const char *type_str = "";
     switch (type) {
@@ -891,7 +821,6 @@ void add_log(const char *text, LogType type) {
     }
     snprintf(buf, sizeof(buf), "%s %s %s", _terminal.logs[idx].datetime, type_str, _terminal.logs[idx].text);
 
-    // Only print to terminal if log_visible is true
     if (_terminal.log_visible) {
         add_terminal_line(buf, LINE_FLAG_SYSTEM);
     }
