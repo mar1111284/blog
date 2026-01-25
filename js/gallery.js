@@ -16,6 +16,24 @@ document.addEventListener('DOMContentLoaded', async () => {
         'portrait-medium':  'tall',
         'portrait-large':   'tall'
     };
+    
+    // Color mode toggle
+	const toggle = document.getElementById('color-mode-toggle');
+	const galleryGrid = document.getElementById('gallery-grid');
+
+	// Apply initial state
+	if (!toggle.checked) {
+		galleryGrid.classList.add('grayscale-mode');
+	}
+
+	// Listen for changes
+	toggle.addEventListener('change', () => {
+		if (toggle.checked) {
+		    galleryGrid.classList.remove('grayscale-mode');
+		} else {
+		    galleryGrid.classList.add('grayscale-mode');
+		}
+	});
 
     try {
         const response = await fetch('gallery.json');

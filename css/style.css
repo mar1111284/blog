@@ -60,18 +60,30 @@ header {
     justify-content: center;
 }
 
-h1 {
+.site-title{
+	line-height: 4rem;
+	margin-bottom: 2rem;
+}
+.site-title h1 {
     font-family: 'Bitmgothic', monospace;
-    font-size: 4.5rem;
-    margin-bottom: 15px;
+    font-size: 4rem;
     letter-spacing: 4px;
+}
+.site-title h2 {
+    font-family: 'Bitmgothic', monospace;
+    color: white;
+    font-size: 2.4rem;
+    letter-spacing: 4px;
+    font-weight: 300;
 }
 
 /* Make h1 link on subpages behave like plain text */
 header h1 a {
-    color: inherit;              /* Use the same color as h1 */
-    text-decoration: none;       /* Remove underline */
-    transition: none;            /* Disable any hover transition if you have one */
+    color: inherit;              
+    text-decoration: none;       
+    transition: none;          
+    padding: 0;
+    margin: 0;
 }
 
 header h1 a:hover {
@@ -109,6 +121,7 @@ nav a {
     font-family: 'Bitmgothic', monospace;
     font-size: 1.8rem;
     transition: color 0.3s;
+    font-weight: 300;
 }
 
 nav a:hover {
@@ -138,6 +151,12 @@ footer {
 
 /* General mobile adjustments (phones + small tablets) */
 @media (max-width: 768px) {
+
+	.site-title{
+		line-height: 4rem;
+		margin-bottom: 1rem;
+		margin-top: 1.5rem;
+	}
 
 	#about-text {
 		padding: 12px;

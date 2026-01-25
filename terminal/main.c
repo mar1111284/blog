@@ -108,10 +108,16 @@ void app_init(void) {
 	add_terminal_line(" ╚════════════════════════════════════════╝", LINE_FLAG_SYSTEM);
 	add_terminal_line("", LINE_FLAG_NONE);
 	add_terminal_line("  Minimalist. For Fun. Built in pure C and WASM Emscripten.", LINE_FLAG_HIGHLIGHT);
-	add_terminal_line("  • Built-in ASCII art converter", LINE_FLAG_NONE);
-	add_terminal_line("  • Simple code editor (Esc to exit)", LINE_FLAG_NONE);
-	add_terminal_line("  • Tiny C compiler playground coming soon…", LINE_FLAG_NONE);
-	add_terminal_line("", LINE_FLAG_NONE);
+	add_terminal_line(" ", LINE_FLAG_NONE);
+	add_terminal_line(" NOTE (dev status – Jan. 2026)", LINE_FLAG_SYSTEM | LINE_FLAG_BOLD);
+	// You can combine flags if your system supports it, or just use LINE_FLAG_SYSTEM
+	add_terminal_line(" • The code editor is currently in early development", LINE_FLAG_NONE);
+	add_terminal_line("   UI/skeleton, but most editing", LINE_FLAG_NONE);
+	add_terminal_line("   features are either missing or only partially working.", LINE_FLAG_NONE);
+	add_terminal_line(" • Many promised functions are bare-bones or placeholders", LINE_FLAG_NONE);
+	add_terminal_line("   at this stage — this is **not** the final version yet.", LINE_FLAG_NONE);
+	add_terminal_line(" ", LINE_FLAG_NONE);
+
 	add_terminal_line("  Type 'help' or just start typing :)", LINE_FLAG_ITALIC);
 	add_terminal_line(" ", LINE_FLAG_NONE);
 	add_terminal_line("  Have fun!", LINE_FLAG_HIGHLIGHT);
